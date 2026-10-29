@@ -3,6 +3,7 @@ package config
 
 import (
 	"net/netip"
+	"net/url"
 	"time"
 
 	"github.com/kaanxsrd/hookline/packages/gocommon/blob"
@@ -26,6 +27,9 @@ type Config struct {
 
 	// S3 is used for bodies over 64 KiB; with S3_BUCKET unset such bodies are rejected.
 	S3 blob.S3Config // S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_FORCE_PATH_STYLE
+
+	StreamTokenSecret string // STREAM_TOKEN_SECRET: verifies SSE stream tokens minted by the web app
+	AppOrigin         string // origin of APP_URL, allowed to open SSE streams cross-origin
 
 	TrustedProxies []netip.Prefix    // TRUSTED_PROXIES: proxies whose X-Forwarded-For is believed
 	PlanOverride   entitlements.Plan // PLAN_OVERRIDE: "unlimited" on self-hosted instances
@@ -55,6 +59,17 @@ func Load(l *config.Loader) (Config, error) {
 		},
 		PlanOverride: entitlements.Plan(l.OneOf("PLAN_OVERRIDE", "", "", string(entitlements.PlanUnlimited))),
 	}
+	c.StreamTokenSecret = l.RequiredString("STREAM_TOKEN_SECRET")
+	if c.StreamTokenSecret != "" && len(c.StreamTokenSecret) < 32 {
+		l.Fail("STREAM_TOKEN_SECRET", "must be at least 32 characters")
+	}
+	appURL := l.String("APP_URL", "http://localhost:3000")
+	if u, err := url.Parse(appURL); err != nil || u.Scheme == "" || u.Host == "" {
+		l.Fail("APP_URL", "must be an absolute URL, got %q", appURL)
+	} else {
+		c.AppOrigin = u.Scheme + "://" + u.Host
+	}
+
 	trusted, err := clientip.ParseTrusted(l.String("TRUSTED_PROXIES", clientip.DefaultTrusted))
 	if err != nil {
 		l.Fail("TRUSTED_PROXIES", "%v", err)

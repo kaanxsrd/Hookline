@@ -11,7 +11,7 @@ Legend: ✅ done · 🚧 partially done (see note) · ⬜ not started
 | 1   | Scaffold                         | ✅     |
 | 2   | Database                         | ✅     |
 | 3   | Intake                           | ✅     |
-| 4   | Live stream                      | ⬜     |
+| 4   | Live stream                      | ✅     |
 | 5   | Auth & orgs                      | ⬜     |
 | 6   | Inbox                            | ⬜     |
 | 7   | Destinations & worker            | ⬜     |
@@ -42,7 +42,8 @@ Legend: ✅ done · 🚧 partially done (see note) · ⬜ not started
 | CI workflow                                                        | ✅     | `.github/workflows/ci.yml`: `bun run check` (Go tests with `-race`) and `bun run build` on every PR                                                 |
 | `bun run check`                                                    | ✅     | Biome, tsc, `bun test scripts`, Turborepo `typecheck lint test`                                                                                     |
 | Root scripts `db:*`, `gen`                                         | ✅     | Added in milestone 2                                                                                                                                |
-| Root scripts `test:e2e`, `loadtest`                                | ⬜     | Added by milestones 4 and 13                                                                                                                        |
+| Root script `test:e2e`                                             | ✅     | Added in milestone 4 (Playwright)                                                                                                                   |
+| Root script `loadtest`                                             | ⬜     | Milestone 13                                                                                                                                        |
 | Strict CSP                                                         | ⬜     | Needs per-request nonces in the Next.js proxy; milestone 5. Other security headers are set now                                                      |
 | Local `go test -race` on Windows                                   | 🚧     | `-race` needs cgo and a C compiler; `scripts/go.ts` adds it whenever one is available and warns otherwise. CI always runs with `-race`              |
 
@@ -92,6 +93,20 @@ Legend: ✅ done · 🚧 partially done (see note) · ⬜ not started
 | Tests                                     | ✅     | Edge intake suite against real PostgreSQL + miniredis + in-memory blob store (capture, paths and query order, preflight, 404/410 cases, body limits including streamed bodies, S3 offload and outage, rate limits, Redis outage, anonymous quota, response sanitizing, delay, partition self-healing, cache behaviour); S3 store against MinIO; client IP, rate limiter, readiness, entitlements, web helpers |
 | Header order and case                     | 🚧     | Stored canonicalized and sorted: Go's HTTP server (and any proxy) does not preserve original order or case. See docs/architecture.md                                                                                                                                                                                                                                                                          |
 
-## 4–14
+## 4. Live stream
+
+| Feature                                 | Status | Notes                                                                                                                                                                                                                                                                   |
+| --------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/stream/{endpointId}` (SSE)     | ✅     | Events `request`, `delivery`, `endpoint`, `ping` (15 s), `resync`, `reconnect`; per-write deadlines detect dead clients                                                                                                                                                 |
+| Stream tokens                           | ✅     | HS256 JWT, 5 min, `sub`/`org`/`ep`/`aud`; signed by the web app, verified strictly by the edge. A shared fixture proves both sides agree byte for byte. The member-facing `stream.token` tRPC procedure arrives with milestone 5; anonymous inboxes use a server action |
+| One Redis subscription per edge process | ✅     | Dynamic SUBSCRIBE/UNSUBSCRIBE per endpoint on one pub/sub connection, in-memory fan-out, slow viewers cut off                                                                                                                                                           |
+| `Last-Event-ID` resume                  | ✅     | Header or `last_event_id` query; up to 500 missed requests replayed from PostgreSQL, deduplicated against live events; `resync` beyond that                                                                                                                             |
+| Graceful shutdown                       | ✅     | `reconnect` event to every viewer via `RegisterOnShutdown`                                                                                                                                                                                                              |
+| Live list in the UI                     | ✅     | `useLiveRequests`: backoff with jitter, token reuse, offline/online handling, dedupe; anonymous inbox rows load details on demand with masked headers                                                                                                                   |
+| Playwright                              | ✅     | `/new` → 20 requests seen live, 10 of them sent while the page is offline (forced reconnect), each exactly once and newest first; `/new` reuse; tokenless inbox is 404. Runs in CI against the production build                                                         |
+| Go tests                                | ✅     | Authorization, concurrent viewers sharing one Redis subscription, resume without duplicates, resync past 500, pings, shutdown, lagging viewers                                                                                                                          |
+| Known noise                             | 🚧     | `next-themes` logs a React 19 "script tag" warning in development; revisited with the app shell in milestone 5                                                                                                                                                          |
+
+## 5–14
 
 Not started. Each section is filled in as its milestone lands.

@@ -7,6 +7,18 @@ const schema = z.object({
   /** Public base URL of the edge (intake). Same as APP_URL behind Caddy; :8080 in development. */
   EDGE_PUBLIC_URL: z.url().optional(),
   DATABASE_URL: z.string().min(1),
+  /** Signs SSE stream tokens; the edge verifies them with the same secret. */
+  STREAM_TOKEN_SECRET: z.string().min(32),
+  /** Addresses exempt from the anonymous-endpoint daily cap (development and tests only). */
+  ANONYMOUS_LIMIT_EXEMPT_IPS: z
+    .string()
+    .default("")
+    .transform((v) =>
+      v
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
 });
 
 export type Env = z.infer<typeof schema> & { EDGE_PUBLIC_URL: string };

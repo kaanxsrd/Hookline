@@ -13,8 +13,9 @@ import (
 )
 
 var required = map[string]string{
-	"DATABASE_URL": "postgres://localhost/hookline",
-	"REDIS_URL":    "redis://localhost:6379/0",
+	"DATABASE_URL":        "postgres://localhost/hookline",
+	"REDIS_URL":           "redis://localhost:6379/0",
+	"STREAM_TOKEN_SECRET": "0123456789abcdef0123456789abcdef",
 }
 
 func TestLoadDefaults(t *testing.T) {
@@ -30,6 +31,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.False(t, c.S3Enabled())
 	assert.Empty(t, c.PlanOverride)
 	assert.NotEmpty(t, c.TrustedProxies)
+	assert.Equal(t, "http://localhost:3000", c.AppOrigin)
 }
 
 func TestLoadValues(t *testing.T) {
@@ -39,6 +41,7 @@ func TestLoadValues(t *testing.T) {
 		"S3_FORCE_PATH_STYLE": "true",
 		"PLAN_OVERRIDE":       "unlimited",
 		"TRUSTED_PROXIES":     "10.1.0.0/16",
+		"APP_URL":             "https://hookline.example.com/some/path",
 	}
 	for k, v := range required {
 		env[k] = v
@@ -50,6 +53,7 @@ func TestLoadValues(t *testing.T) {
 	assert.Equal(t, entitlements.PlanUnlimited, c.PlanOverride)
 	require.Len(t, c.TrustedProxies, 1)
 	assert.Equal(t, "10.1.0.0/16", c.TrustedProxies[0].String())
+	assert.Equal(t, "https://hookline.example.com", c.AppOrigin)
 }
 
 func TestLoadReportsAllErrors(t *testing.T) {
@@ -59,9 +63,11 @@ func TestLoadReportsAllErrors(t *testing.T) {
 		"EDGE_SHUTDOWN_TIMEOUT": "soon",
 		"PLAN_OVERRIDE":         "platinum",
 		"TRUSTED_PROXIES":       "not-an-ip",
+		"STREAM_TOKEN_SECRET":   "short",
+		"APP_URL":               "not a url",
 	})))
 	require.Error(t, err)
-	for _, key := range []string{"EDGE_ADDR", "LOG_LEVEL", "EDGE_SHUTDOWN_TIMEOUT", "DATABASE_URL", "REDIS_URL", "PLAN_OVERRIDE", "TRUSTED_PROXIES"} {
+	for _, key := range []string{"EDGE_ADDR", "LOG_LEVEL", "EDGE_SHUTDOWN_TIMEOUT", "DATABASE_URL", "REDIS_URL", "PLAN_OVERRIDE", "TRUSTED_PROXIES", "STREAM_TOKEN_SECRET", "APP_URL"} {
 		assert.Contains(t, err.Error(), key)
 	}
 }

@@ -110,3 +110,73 @@ func (q *Queries) InsertRequest(ctx context.Context, arg InsertRequestParams) er
 	)
 	return err
 }
+
+const listRequestSummariesAfter = `-- name: ListRequestSummariesAfter :many
+SELECT id, endpoint_id, method, path, content_type, body_size, source_ip,
+       signature_status, response_status, received_at
+FROM request
+WHERE endpoint_id = $1
+  AND received_at >= $2::timestamptz
+  AND id > $3::uuid
+ORDER BY id
+LIMIT $4::int
+`
+
+type ListRequestSummariesAfterParams struct {
+	EndpointID uuid.UUID
+	Since      time.Time
+	AfterID    uuid.UUID
+	MaxRows    int32
+}
+
+type ListRequestSummariesAfterRow struct {
+	ID              uuid.UUID
+	EndpointID      uuid.UUID
+	Method          string
+	Path            string
+	ContentType     *string
+	BodySize        int32
+	SourceIp        *netip.Addr
+	SignatureStatus SignatureStatus
+	ResponseStatus  *int32
+	ReceivedAt      time.Time
+}
+
+// Replays the requests a reconnecting live stream missed, oldest first.
+// since bounds received_at (from the last seen UUIDv7, minus a clock-skew
+// margin) so PostgreSQL only scans the most recent partitions.
+func (q *Queries) ListRequestSummariesAfter(ctx context.Context, arg ListRequestSummariesAfterParams) ([]ListRequestSummariesAfterRow, error) {
+	rows, err := q.db.Query(ctx, listRequestSummariesAfter,
+		arg.EndpointID,
+		arg.Since,
+		arg.AfterID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRequestSummariesAfterRow{}
+	for rows.Next() {
+		var i ListRequestSummariesAfterRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EndpointID,
+			&i.Method,
+			&i.Path,
+			&i.ContentType,
+			&i.BodySize,
+			&i.SourceIp,
+			&i.SignatureStatus,
+			&i.ResponseStatus,
+			&i.ReceivedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -23,6 +23,7 @@ type Check struct {
 // Routes are the handlers mounted on the public listener.
 type Routes struct {
 	Intake http.Handler
+	Stream http.Handler
 	Checks []Check
 }
 
@@ -42,6 +43,9 @@ func New(logger *slog.Logger, routes Routes) http.Handler {
 	if routes.Intake != nil {
 		r.Handle("/h/{slug}", routes.Intake)
 		r.Handle("/h/{slug}/*", routes.Intake)
+	}
+	if routes.Stream != nil {
+		r.Get("/v1/stream/{endpointId}", routes.Stream.ServeHTTP)
 	}
 	return r
 }

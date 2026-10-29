@@ -16,6 +16,8 @@ type Metrics struct {
 	IntakeRejects  *prometheus.CounterVec
 	BodiesOffload  prometheus.Counter
 	Degraded       *prometheus.CounterVec
+	SSEClients     prometheus.Gauge
+	SSEEvents      prometheus.Counter
 }
 
 // New registers every collector, plus Go runtime and process metrics, on a
@@ -47,9 +49,18 @@ func New() *Metrics {
 			Namespace: "hookline", Subsystem: "edge", Name: "degraded_operations_total",
 			Help: "Operations that failed open because a dependency was unavailable.",
 		}, []string{"dependency", "operation"}),
+		SSEClients: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "hookline", Subsystem: "stream", Name: "clients",
+			Help: "Open SSE connections on this instance.",
+		}),
+		SSEEvents: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "hookline", Subsystem: "stream", Name: "events_total",
+			Help: "Live events written to SSE clients (excluding pings and replays).",
+		}),
 	}
 	reg.MustRegister(
 		m.IntakeDuration, m.IntakeBytes, m.IntakeRejects, m.BodiesOffload, m.Degraded,
+		m.SSEClients, m.SSEEvents,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)

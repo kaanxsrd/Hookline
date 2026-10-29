@@ -23,6 +23,7 @@
     "lint": "biome lint . && turbo run lint",
     "typecheck": "tsc -p scripts --noEmit && turbo run typecheck",
     "test": "bun test scripts && turbo run test",
+    "test:e2e": "bun run --cwd apps/web test:e2e",
     "format": "biome format --write .",
     "check": "biome check . && tsc -p scripts --noEmit && bun test scripts && turbo run typecheck lint test",
     "check:fix": "biome check --write .",

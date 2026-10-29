@@ -2,7 +2,9 @@ import "server-only";
 import { schema } from "@hookline/db";
 import { anonymousRules } from "@hookline/shared";
 import { and, count, eq, gt, isNull } from "drizzle-orm";
+import { cookies } from "next/headers";
 import { getDb } from "./db";
+import { env } from "./env";
 import { matchesHash, newSlug, newToken, sha256 } from "./random";
 
 /** httpOnly cookie remembering the visitor's anonymous endpoint as "<slug>.<token>". */
@@ -62,6 +64,21 @@ export async function authorizeAnonymous(
   };
 }
 
+/**
+ * Resolves the viewer's access to an anonymous inbox from the share-link
+ * token, falling back to the creator's cookie.
+ */
+export async function resolveAnonymousAccess(
+  slug: string,
+  shareToken: string | undefined,
+): Promise<{ endpoint: AnonymousEndpoint; token: string } | null> {
+  const visitor = parseVisitorCookie((await cookies()).get(VISITOR_COOKIE)?.value);
+  const token = shareToken ?? (visitor?.slug === slug ? visitor.token : undefined);
+  if (!token) return null;
+  const endpoint = await authorizeAnonymous(slug, token);
+  return endpoint ? { endpoint, token } : null;
+}
+
 export type CreateResult =
   | { ok: true; slug: string; token: string; expiresAt: Date }
   | { ok: false; error: string };
@@ -71,7 +88,10 @@ export async function createAnonymousEndpoint(ip: string | null): Promise<Create
   const db = getDb();
   const e = schema.endpoint;
 
-  if (ip) {
+  // ANONYMOUS_LIMIT_EXEMPT_IPS (loopback in .env.example) keeps local
+  // development and end-to-end tests from locking themselves out.
+  const limited = ip !== null && !env().ANONYMOUS_LIMIT_EXEMPT_IPS.includes(ip);
+  if (limited) {
     const since = new Date(Date.now() - 24 * 3_600_000);
     const [recent] = await db
       .select({ n: count() })

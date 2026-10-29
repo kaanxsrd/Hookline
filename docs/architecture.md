@@ -62,6 +62,18 @@ Configured responses cannot set cookies, security policies, CORS, framing, hop-b
 
 Headers are stored as an ordered array of `[name, value]` pairs, with repeated values kept in their original order. Go's HTTP server canonicalizes header names and does not preserve their order, HTTP/2 lowercases them, and any proxy in front (Caddy) rebuilds them. So the edge stores names in canonical form, sorted, with `Host` first. Original casing and inter-header order are not recoverable once a request has passed through a standard HTTP stack.
 
+## Live stream
+
+Dashboards receive requests live over Server-Sent Events from `GET /v1/stream/{endpointId}?token=...` on the edge (`services/edge/internal/stream`).
+
+1. **Token.** The browser asks the web app for a stream token: the `stream.token` procedure for members, or a server action for anonymous view-token holders. The web app checks access and signs a compact HS256 JWT with `STREAM_TOKEN_SECRET`: five minutes, claims `sub`, `org`, `ep`, `aud=hookline-stream`. The edge accepts exactly HS256 and checks the signature in constant time, the audience, expiry (±30 s skew) and that `ep` matches the URL. The query string never reaches logs.
+2. **One subscription per process.** The edge's `Hub` holds a single Redis pub/sub connection. It subscribes to `ep:{id}` when the first local viewer of that endpoint arrives and unsubscribes when the last leaves, then fans messages out in memory. A viewer more than 256 events behind is disconnected rather than slowing the others, and it resumes on reconnect.
+3. **Resume.** Event IDs are request IDs (UUIDv7). A reconnect sends `Last-Event-ID` (EventSource's own retry) or `last_event_id` (our client's retry with a fresh token). The edge subscribes first, then replays up to 500 newer requests from PostgreSQL (bounded by the UUID's timestamp minus a minute, so only recent partitions are scanned), then streams live events, skipping any it just replayed. Beyond 500 missed requests it sends `resync` and the page reloads its list.
+4. **Events:** `request`, `delivery`, `endpoint`, `ping` every 15 s, `resync`, and `reconnect`, which is sent to every viewer when the edge shuts down (registered with `http.Server.RegisterOnShutdown`) so streams never hold up a deploy.
+5. **Client** (`useLiveRequests`). It reconnects with exponential backoff and jitter (1 s up to 30 s), reuses a token while more than a minute remains, drops the stream as soon as the browser reports `offline` and reconnects on `online`, and de-duplicates by request ID.
+
+In development the web app and the edge are different origins; the stream answers with `Access-Control-Allow-Origin` set to `APP_URL`'s origin. The token travels in the query string because `EventSource` cannot send headers.
+
 ## Data model notes
 
 - **IDs** are UUIDv7 everywhere, from a `uuidv7()` SQL default (PostgreSQL 17 has none built in) or from the application when the timestamp must be chosen.
@@ -82,7 +94,7 @@ Headers are stored as an ordered array of `[name, value]` pairs, with repeated v
 ## Observability
 
 - **Logs:** structured JSON (`slog`), one access-log line per request with the request ID, method, path, status, size and duration. Query strings, header values and bodies are never logged.
-- **Metrics** (`EDGE_METRICS_ADDR`, default `:9090`): `hookline_intake_duration_seconds{outcome}`, `hookline_intake_body_bytes_total`, `hookline_intake_rejects_total{reason}`, `hookline_intake_offloaded_bodies_total`, `hookline_edge_degraded_operations_total{dependency,operation}`, plus Go runtime and process metrics.
+- **Metrics** (`EDGE_METRICS_ADDR`, default `:9090`): `hookline_intake_duration_seconds{outcome}`, `hookline_intake_body_bytes_total`, `hookline_intake_rejects_total{reason}`, `hookline_intake_offloaded_bodies_total`, `hookline_edge_degraded_operations_total{dependency,operation}`, `hookline_stream_clients`, `hookline_stream_events_total`, plus Go runtime and process metrics.
 
 ## Development environment
 

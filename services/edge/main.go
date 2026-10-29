@@ -30,6 +30,8 @@ import (
 	"github.com/kaanxsrd/hookline/services/edge/internal/metrics"
 	"github.com/kaanxsrd/hookline/services/edge/internal/ratelimit"
 	"github.com/kaanxsrd/hookline/services/edge/internal/server"
+	"github.com/kaanxsrd/hookline/services/edge/internal/stream"
+	"github.com/kaanxsrd/hookline/services/edge/internal/streamauth"
 )
 
 func main() {
@@ -96,12 +98,28 @@ func run() error {
 		Logger:    logger,
 	})
 
-	public := httpx.NewServer(server.New(logger, server.Routes{Intake: handler, Checks: checks}), logger)
+	tokens, err := streamauth.NewVerifier(cfg.StreamTokenSecret)
+	if err != nil {
+		return err
+	}
+	hub := stream.NewHub(rdb, logger)
+	streams := &stream.Handler{
+		Hub: hub, Queries: queries, Tokens: tokens, AllowOrigin: cfg.AppOrigin,
+		Metrics: m, Logger: logger,
+	}
+
+	public := httpx.NewServer(server.New(logger, server.Routes{Intake: handler, Stream: streams, Checks: checks}), logger)
+	// Open streams would otherwise hold a graceful shutdown until its deadline.
+	public.RegisterOnShutdown(hub.Shutdown)
 	internal := httpx.NewServer(promhttp.HandlerFor(m.Registry, promhttp.HandlerOpts{}), logger)
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return httpx.ListenAndServe(gctx, public, cfg.Addr, logger, cfg.ShutdownTimeout) })
 	g.Go(func() error { return httpx.ListenAndServe(gctx, internal, cfg.MetricsAddr, logger, 5*time.Second) })
+	g.Go(func() error {
+		hub.Run(gctx)
+		return nil
+	})
 	g.Go(func() error {
 		// Runs until the servers have drained, then flushes the last counts.
 		ctrs.Run(gctx)
