@@ -85,7 +85,10 @@ func newLoginCmd(opts *globalOptions) *cobra.Command {
 }
 
 func pollLogin(ctx context.Context, client *api.Client, dc api.DeviceCode) (api.Login, error) {
-	interval := time.Duration(max(dc.Interval, 1)) * time.Second
+	interval := time.Duration(dc.Interval) * time.Second
+	if interval <= 0 {
+		interval = 200 * time.Millisecond // servers send 5 s; this only guards against 0
+	}
 	deadline := time.Now().Add(time.Duration(dc.ExpiresIn) * time.Second)
 	for {
 		t := time.NewTimer(interval)

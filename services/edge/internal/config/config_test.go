@@ -16,6 +16,7 @@ var required = map[string]string{
 	"DATABASE_URL":        "postgres://localhost/hookline",
 	"REDIS_URL":           "redis://localhost:6379/0",
 	"STREAM_TOKEN_SECRET": "0123456789abcdef0123456789abcdef",
+	"DATA_ENCRYPTION_KEY": "k1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
 }
 
 func TestLoadDefaults(t *testing.T) {
@@ -33,6 +34,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.NotEmpty(t, c.TrustedProxies)
 	assert.Equal(t, "http://localhost:3000", c.AppOrigin)
 	assert.Equal(t, "http://localhost:8080", c.PublicURL)
+	assert.NotNil(t, c.Secrets)
 }
 
 func TestLoadValues(t *testing.T) {
@@ -69,7 +71,7 @@ func TestLoadReportsAllErrors(t *testing.T) {
 		"EDGE_PUBLIC_URL":       "ftp://x",
 	})))
 	require.Error(t, err)
-	for _, key := range []string{"EDGE_ADDR", "LOG_LEVEL", "EDGE_SHUTDOWN_TIMEOUT", "DATABASE_URL", "REDIS_URL", "PLAN_OVERRIDE", "TRUSTED_PROXIES", "STREAM_TOKEN_SECRET", "APP_URL", "EDGE_PUBLIC_URL"} {
+	for _, key := range []string{"EDGE_ADDR", "LOG_LEVEL", "EDGE_SHUTDOWN_TIMEOUT", "DATABASE_URL", "REDIS_URL", "PLAN_OVERRIDE", "TRUSTED_PROXIES", "STREAM_TOKEN_SECRET", "APP_URL", "EDGE_PUBLIC_URL", "DATA_ENCRYPTION_KEY"} {
 		assert.Contains(t, err.Error(), key)
 	}
 }

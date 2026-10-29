@@ -140,7 +140,10 @@ func (p *Printer) prefix(slug string, req protocol.Request) string {
 	}
 	when := req.ReceivedAt.Local().Format("15:04:05")
 	marker := ""
-	if req.Replayed {
+	switch {
+	case req.ReplayOf != "":
+		marker = p.info.Render(" (replay)")
+	case req.Replayed:
 		marker = p.dim.Render(" (missed while reconnecting)")
 	}
 	return p.dim.Render(when) + "  " + p.bold.Render(fmt.Sprintf("%-6s", req.Method)) + " " + path + marker

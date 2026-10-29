@@ -79,6 +79,8 @@ export type TunnelRequest = {
   body_omitted?: boolean;
   sync_deadline_ms?: number;
   replayed?: boolean;
+  /** Set when a captured request is sent again from the dashboard or API (id is then new). */
+  replay_of?: string;
 };
 
 export type TunnelResponse = {

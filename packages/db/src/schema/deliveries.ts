@@ -92,6 +92,37 @@ export const delivery = pgTable(
   ],
 );
 
+/** Largest edited body a replay may carry. */
+export const REPLAY_OVERRIDE_MAX_BODY_BYTES = 1024 * 1024;
+
+/**
+ * An edited request to send instead of the captured one ("edit & replay").
+ * The captured request is never modified.
+ */
+export const deliveryOverride = pgTable(
+  "delivery_override",
+  {
+    deliveryId: uuid("delivery_id")
+      .primaryKey()
+      .references(() => delivery.id, { onDelete: "cascade" }),
+    method: text("method").notNull(),
+    /** Below /h/{slug}, starting with "/". */
+    path: text("path").notNull(),
+    query: jsonb("query").$type<Pair[]>().notNull().default(sql`'[]'::jsonb`),
+    headers: jsonb("headers").$type<Pair[]>().notNull().default(sql`'[]'::jsonb`),
+    body: bytea("body"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("delivery_override_method_check", sql`${t.method} ~ '^[A-Z]{1,16}$'`),
+    check("delivery_override_path_check", sql`${t.path} LIKE '/%'`),
+    check(
+      "delivery_override_body_check",
+      sql`${t.body} IS NULL OR octet_length(${t.body}) <= ${sql.raw(String(REPLAY_OVERRIDE_MAX_BODY_BYTES))}`,
+    ),
+  ],
+);
+
 export const deliveryAttempt = pgTable(
   "delivery_attempt",
   {

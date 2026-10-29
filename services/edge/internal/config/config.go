@@ -12,6 +12,7 @@ import (
 	"github.com/kaanxsrd/hookline/packages/gocommon/config"
 	"github.com/kaanxsrd/hookline/packages/gocommon/entitlements"
 	"github.com/kaanxsrd/hookline/packages/gocommon/logging"
+	"github.com/kaanxsrd/hookline/packages/gocommon/secretbox"
 )
 
 // Config is the edge server configuration.
@@ -35,6 +36,9 @@ type Config struct {
 
 	TrustedProxies []netip.Prefix    // TRUSTED_PROXIES: proxies whose X-Forwarded-For is believed
 	PlanOverride   entitlements.Plan // PLAN_OVERRIDE: "unlimited" on self-hosted instances
+
+	// DATA_ENCRYPTION_KEY: "kid:base64key[,...]", decrypts endpoint signature secrets.
+	Secrets *secretbox.Box
 }
 
 // S3Enabled reports whether object storage is configured.
@@ -60,6 +64,13 @@ func Load(l *config.Loader) (Config, error) {
 			ForcePathStyle:  l.Bool("S3_FORCE_PATH_STYLE", false),
 		},
 		PlanOverride: entitlements.Plan(l.OneOf("PLAN_OVERRIDE", "", "", string(entitlements.PlanUnlimited))),
+	}
+	if spec := l.RequiredString("DATA_ENCRYPTION_KEY"); spec != "" {
+		box, err := secretbox.Parse(spec)
+		if err != nil {
+			l.Fail("DATA_ENCRYPTION_KEY", "%v", err)
+		}
+		c.Secrets = box
 	}
 	c.StreamTokenSecret = l.RequiredString("STREAM_TOKEN_SECRET")
 	if c.StreamTokenSecret != "" && len(c.StreamTokenSecret) < 32 {

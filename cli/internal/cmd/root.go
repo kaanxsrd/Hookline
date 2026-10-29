@@ -116,6 +116,8 @@ func NewRoot(stdout, stderr io.Writer) *cobra.Command {
 		newEndpointsCmd(opts),
 		newListenCmd(opts),
 		newTailCmd(opts),
+		newReplayCmd(opts),
+		newTriggerCmd(opts),
 	)
 	return root
 }

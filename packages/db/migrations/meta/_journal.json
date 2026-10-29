@@ -43,6 +43,13 @@
       "when": 1793269744271,
       "tag": "0005_auth_rate_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793277719605,
+      "tag": "0006_replay_overrides",
+      "breakpoints": true
     }
   ]
 }

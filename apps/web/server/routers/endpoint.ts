@@ -5,6 +5,7 @@ import { and, count, desc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { authorizeAnonymous, parseVisitorCookie, VISITOR_COOKIE } from "@/lib/anonymous";
+import { loadLatestCaptured } from "@/lib/captured";
 import {
   checkEndpointQuota,
   ENDPOINT_TEMPLATES,
@@ -12,12 +13,25 @@ import {
   QuotaError,
 } from "@/lib/endpoints";
 import { intakeUrl } from "@/lib/env";
+import { orgPlan } from "@/lib/plans";
+import { newSlug } from "@/lib/random";
 import { invalidateEndpointCache, publishEndpointEvent, tunnelCount } from "@/lib/redis";
+import { endpointSignatureContext, openSecret, sealSecret } from "@/lib/secrets";
+import { SIGNATURE_PROVIDERS, verifySignature } from "@/lib/signatures";
 import { orgProcedure, router } from "../trpc/init";
 
 const e = schema.endpoint;
 
 const slugInput = z.string().regex(/^[0-9A-Za-z]{12}$/, "Invalid endpoint");
+
+const responseHeaderName = z
+  .string()
+  .trim()
+  .regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,100}$/, "Not a valid header name");
+const responseHeaderValue = z
+  .string()
+  .max(4000)
+  .regex(/^[^\r\n\0]*$/, "Header values cannot contain line breaks");
 
 /** Loads an endpoint of the caller's organization or fails with NOT_FOUND. */
 async function ownedEndpoint(
@@ -275,5 +289,193 @@ export const endpointRouter = router({
       jar.delete(VISITOR_COOKIE);
       ctx.audit({ type: "endpoint", id: anonymous.id, metadata: { slug: anonymous.slug } });
       return { slug: anonymous.slug };
+    }),
+
+  /** The answer senders get: static (status, headers, body, delay) or CLI sync. */
+  updateResponse: orgProcedure
+    .meta({ role: "member" })
+    .input(
+      z.object({
+        slug: slugInput,
+        mode: z.enum(["static", "cli_sync"]),
+        status: z.number().int().min(200).max(599),
+        headers: z.array(z.tuple([responseHeaderName, responseHeaderValue])).max(20),
+        body: z.string().max(64 * 1024, "Keep the body under 64 KiB"),
+        delayMs: z.number().int().min(0).max(30_000),
+        syncTimeoutMs: z.number().int().min(1000).max(30_000),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const current = await ownedEndpoint(ctx, input.slug);
+      await ctx.db
+        .update(e)
+        .set({
+          responseMode: input.mode,
+          responseStatus: input.status,
+          responseHeaders: input.headers,
+          responseBody: input.body,
+          responseDelayMs: input.delayMs,
+          syncTimeoutMs: input.syncTimeoutMs,
+        })
+        .where(eq(e.id, current.id));
+      await invalidateEndpointCache(current.slug);
+      ctx.audit({
+        type: "endpoint",
+        id: current.id,
+        metadata: {
+          slug: current.slug,
+          mode: input.mode,
+          status: input.status,
+          delayMs: input.delayMs,
+        },
+      });
+      return { ok: true };
+    }),
+
+  /**
+   * Sets the signature provider. A new secret replaces the stored one; omit it
+   * to keep the current secret. A null provider turns verification off.
+   */
+  updateSignature: orgProcedure
+    .meta({ role: "member" })
+    .input(
+      z.object({
+        slug: slugInput,
+        provider: z.enum(SIGNATURE_PROVIDERS).nullable(),
+        secret: z.string().trim().min(1).max(500).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const current = await ownedEndpoint(ctx, input.slug);
+      const signatureSecretEnc =
+        input.provider === null
+          ? null
+          : input.secret
+            ? sealSecret(input.secret, endpointSignatureContext(current.id))
+            : current.signatureSecretEnc;
+      await ctx.db
+        .update(e)
+        .set({ signatureProvider: input.provider, signatureSecretEnc })
+        .where(eq(e.id, current.id));
+      await invalidateEndpointCache(current.slug);
+      ctx.audit({
+        type: "endpoint",
+        id: current.id,
+        metadata: {
+          slug: current.slug,
+          provider: input.provider,
+          secretChanged: Boolean(input.secret),
+        },
+      });
+      return { ok: true, hasSecret: signatureSecretEnc !== null };
+    }),
+
+  /**
+   * Verifies the endpoint's latest request with a provider and a secret
+   * (the one typed in, or the stored one) without saving anything.
+   */
+  testSignature: orgProcedure
+    .meta({ role: "member", skipAudit: true })
+    .input(
+      z.object({
+        slug: slugInput,
+        provider: z.enum(SIGNATURE_PROVIDERS),
+        secret: z.string().trim().max(500).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const current = await ownedEndpoint(ctx, input.slug);
+      let secret = input.secret;
+      if (!secret && current.signatureSecretEnc) {
+        secret = openSecret(current.signatureSecretEnc, endpointSignatureContext(current.id));
+      }
+      if (!secret) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Enter the secret to test." });
+      }
+      const latest = await loadLatestCaptured(ctx.db, current, 10 * 1024 * 1024);
+      if (!latest) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "No request captured yet. Send one from the provider, then test.",
+        });
+      }
+      const result = verifySignature(input.provider, secret, {
+        headers: latest.headers,
+        body: latest.body ?? new Uint8Array(),
+        // Judge freshness as of capture, not as of now.
+        now: latest.receivedAt,
+      });
+      const request = {
+        requestId: latest.id,
+        method: latest.method,
+        path: latest.path,
+        receivedAt: latest.receivedAt,
+      };
+      return result.verified
+        ? { ...request, verified: true as const, reason: null, message: null }
+        : { ...request, verified: false as const, reason: result.reason, message: result.message };
+    }),
+
+  /** How long captured requests are kept, up to the plan's retention. */
+  updateRetention: orgProcedure
+    .meta({ role: "member" })
+    .input(
+      z.object({
+        slug: slugInput,
+        hours: z
+          .number()
+          .int()
+          .min(1)
+          .max(24 * 365),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const current = await ownedEndpoint(ctx, input.slug);
+      const { limits, plan } = await orgPlan(ctx.db, ctx.org.id);
+      if (input.hours > limits.retention_hours) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: `The ${plan} plan keeps requests for up to ${limits.retention_hours} hours.`,
+        });
+      }
+      await ctx.db.update(e).set({ retentionHours: input.hours }).where(eq(e.id, current.id));
+      ctx.audit({
+        type: "endpoint",
+        id: current.id,
+        metadata: { slug: current.slug, hours: input.hours },
+      });
+      return { ok: true };
+    }),
+
+  /** Replaces the URL; the old one stops working at once. */
+  regenerateSlug: orgProcedure
+    .meta({ role: "member" })
+    .input(z.object({ slug: slugInput }))
+    .mutation(async ({ ctx, input }) => {
+      const current = await ownedEndpoint(ctx, input.slug);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const next = newSlug();
+        const [taken] = await ctx.db.select({ id: e.id }).from(e).where(eq(e.slug, next));
+        if (taken) continue;
+        const [row] = await ctx.db
+          .update(e)
+          .set({ slug: next })
+          .where(eq(e.id, current.id))
+          .returning({ slug: e.slug })
+          .catch(() => []);
+        if (row) {
+          await invalidateEndpointCache(current.slug);
+          ctx.audit({
+            type: "endpoint",
+            id: current.id,
+            metadata: { from: current.slug, to: row.slug },
+          });
+          return { slug: row.slug, url: intakeUrl(row.slug) };
+        }
+      }
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Could not allocate a new URL.",
+      });
     }),
 });

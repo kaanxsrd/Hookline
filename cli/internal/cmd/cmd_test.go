@@ -3,13 +3,16 @@ package cmd_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -20,7 +23,29 @@ import (
 	"github.com/kaanxsrd/hookline/cli/internal/config"
 )
 
-const key = "hk_live_CliTestKey0123456789abcdefghijABCDEFGHIJKLMN"
+const (
+	key       = "hk_live_CliTestKey0123456789abcdefghijABCDEFGHIJKLMN"
+	requestID = "0192f3a4-0000-7000-8000-000000000001"
+)
+
+// TestMain doubles as a fake $EDITOR: with HOOKLINE_FAKE_EDITOR set, the test
+// binary rewrites the file it is given and exits.
+func TestMain(m *testing.M) {
+	if os.Getenv("HOOKLINE_FAKE_EDITOR") == "1" {
+		file := os.Args[len(os.Args)-1]
+		b, err := os.ReadFile(file)
+		if err != nil {
+			os.Exit(2)
+		}
+		out := strings.Replace(string(b), "method: POST", "method: PUT", 1)
+		out = strings.Replace(out, "invoice.paid", "invoice.voided", 1)
+		if err := os.WriteFile(file, []byte(out), 0o600); err != nil {
+			os.Exit(3)
+		}
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
 
 // fakeAPI imitates the parts of /api/v1 the CLI uses.
 type fakeAPI struct {
@@ -28,6 +53,11 @@ type fakeAPI struct {
 	polls   atomic.Int32
 	revoked atomic.Bool
 	created atomic.Value
+
+	mu       sync.Mutex
+	replays  []map[string]any
+	captured []*http.Request
+	bodies   []string
 }
 
 func newFakeAPI(t *testing.T) *fakeAPI {
@@ -79,7 +109,7 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 		writeJSON(w, 200, map[string]bool{"revoked": true})
 	}))
 	endpoint := map[string]any{
-		"id": "e1", "slug": "abc123def456", "url": "https://hooks.test/h/abc123def456", "name": "Stripe",
+		"id": "e1", "slug": "abc123def456", "url": "", "name": "Stripe",
 		"status": "active", "request_count": 7, "created_at": "2026-01-01T00:00:00Z",
 	}
 	mux.HandleFunc("GET /api/v1/endpoints", authed(func(w http.ResponseWriter, _ *http.Request) {
@@ -101,7 +131,46 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 	mux.HandleFunc("DELETE /api/v1/endpoints/{ref}", authed(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
+	mux.HandleFunc("GET /api/v1/requests/{id}", authed(func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("id") != requestID {
+			writeJSON(w, 404, map[string]any{"error": map[string]string{"code": "not_found", "message": "No such request in this organization."}})
+			return
+		}
+		body := base64.StdEncoding.EncodeToString([]byte(`{"type":"invoice.paid"}`))
+		writeJSON(w, 200, map[string]any{
+			"id": requestID, "endpoint": map[string]string{"id": "e1", "slug": "abc123def456"},
+			"method": "POST", "path": "/stripe", "query": [][2]string{{"a", "1"}},
+			"headers":  [][2]string{{"Content-Type", "application/json"}, {"Stripe-Signature", "t=1,v1=x"}},
+			"body_b64": body, "body_size": 23, "received_at": "2026-10-29T12:00:00Z",
+		})
+	}))
+	mux.HandleFunc("POST /api/v1/requests/{id}/replay", authed(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		f.replays = append(f.replays, body)
+		f.mu.Unlock()
+		if body["target"] == "cli" {
+			writeJSON(w, 202, map[string]any{"target": "cli", "receivers": 1})
+			return
+		}
+		writeJSON(w, 202, map[string]any{"target": "destination", "delivery_id": "d1"})
+	}))
+	mux.HandleFunc("GET /api/v1/endpoints/{ref}/signature-secret", authed(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, map[string]string{"provider": "stripe", "secret": "whsec_from_api"})
+	}))
+	// Intake, for `trigger`.
+	mux.HandleFunc("/h/", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		f.mu.Lock()
+		f.captured = append(f.captured, r)
+		f.bodies = append(f.bodies, string(body))
+		f.mu.Unlock()
+		w.Header().Set("X-Hookline-Request-Id", "captured-1")
+		w.WriteHeader(http.StatusOK)
+	})
 	f.Server = httptest.NewServer(mux)
+	endpoint["url"] = f.URL + "/h/abc123def456"
 	t.Cleanup(f.Close)
 	return f
 }
@@ -242,4 +311,88 @@ func TestListenValidatesFlags(t *testing.T) {
 	_, stderr, code = runCLI(t, "", "listen", "abc123def456", "--forward", "http://localhost:3000")
 	assert.Equal(t, 1, code)
 	assert.Contains(t, stderr, "not logged in")
+}
+
+func TestReplayToALocalURL(t *testing.T) {
+	api := setup(t)
+	login(t, api)
+	var got *http.Request
+	var body string
+	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r
+		b, _ := io.ReadAll(r.Body)
+		body = string(b)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer local.Close()
+
+	out, stderr, code := runCLI(t, "", "replay", requestID, "--to", local.URL+"/hooks")
+	require.Equal(t, 0, code, stderr)
+	assert.Equal(t, "/hooks/stripe", got.URL.Path)
+	assert.Equal(t, "a=1", got.URL.RawQuery)
+	assert.Equal(t, "t=1,v1=x", got.Header.Get("Stripe-Signature"))
+	assert.JSONEq(t, `{"type":"invoice.paid"}`, body)
+	assert.Contains(t, out, "→ 202")
+	assert.Contains(t, out, "(replay)")
+}
+
+func TestReplayEditedToTheCLI(t *testing.T) {
+	api := setup(t)
+	login(t, api)
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	t.Setenv("HOOKLINE_EDITOR", exe)
+	t.Setenv("HOOKLINE_FAKE_EDITOR", "1")
+
+	_, stderr, code := runCLI(t, "", "replay", requestID, "--cli", "--edit")
+	require.Equal(t, 0, code, stderr)
+	assert.Contains(t, stderr, "Sent to the CLIs")
+	api.mu.Lock()
+	defer api.mu.Unlock()
+	require.Len(t, api.replays, 1)
+	assert.Equal(t, "cli", api.replays[0]["target"])
+	override := api.replays[0]["override"].(map[string]any)
+	assert.Equal(t, "PUT", override["method"])
+	assert.Equal(t, "/stripe", override["path"])
+	body, _ := base64.StdEncoding.DecodeString(override["body_b64"].(string))
+	assert.JSONEq(t, `{"type":"invoice.voided"}`, string(body))
+}
+
+func TestReplayNeedsOneTarget(t *testing.T) {
+	api := setup(t)
+	login(t, api)
+	_, stderr, code := runCLI(t, "", "replay", requestID)
+	assert.Equal(t, 1, code)
+	assert.Contains(t, stderr, "choose one target")
+	_, stderr, code = runCLI(t, "", "replay", requestID, "--cli", "--destination", "d1")
+	assert.Equal(t, 1, code)
+	assert.Contains(t, stderr, "choose one target")
+
+	_, stderr, code = runCLI(t, "", "replay", requestID, "--destination", "0192f3a4-0000-7000-8000-00000000000d")
+	require.Equal(t, 0, code, stderr)
+	assert.Contains(t, stderr, "Queued delivery d1")
+}
+
+func TestTriggerSignsWithTheEndpointSecret(t *testing.T) {
+	api := setup(t)
+	login(t, api)
+
+	out, _, code := runCLI(t, "", "trigger", "--list")
+	require.Equal(t, 0, code)
+	assert.Contains(t, out, "stripe.payment_intent.succeeded")
+	assert.Contains(t, out, "discord.ping")
+
+	_, stderr, code := runCLI(t, "", "trigger", "abc123def456", "stripe.payment_intent.succeeded")
+	require.Equal(t, 0, code, stderr)
+	assert.Contains(t, stderr, "Sent stripe.payment_intent.succeeded")
+	api.mu.Lock()
+	defer api.mu.Unlock()
+	require.Len(t, api.captured, 1)
+	assert.Equal(t, "/h/abc123def456/stripe", api.captured[0].URL.Path)
+	assert.Contains(t, api.captured[0].Header.Get("Stripe-Signature"), ",v1=")
+	assert.Contains(t, api.bodies[0], `"type":"payment_intent.succeeded"`)
+
+	_, stderr, code = runCLI(t, "", "trigger", "abc123def456", "nope.event")
+	assert.Equal(t, 1, code)
+	assert.Contains(t, stderr, "trigger --list")
 }

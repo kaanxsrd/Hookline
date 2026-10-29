@@ -98,6 +98,9 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[jobs.DeliverArgs]) err
 	if err != nil {
 		return fmt.Errorf("load request: %w", err)
 	}
+	if req, err = w.applyOverride(ctx, d.ID, req); err != nil {
+		return err
+	}
 
 	attemptNo := d.AttemptCount + 1
 	outcome := w.attempt(ctx, d, req, attemptNo)
@@ -218,6 +221,22 @@ func (w *Worker) attempt(ctx context.Context, d dbq.GetDeliveryWorkRow, req dbq.
 		}
 	}
 	return o
+}
+
+// applyOverride swaps in the edited request of an "edit & replay" delivery.
+// The captured request itself is never changed.
+func (w *Worker) applyOverride(ctx context.Context, deliveryID uuid.UUID, req dbq.GetRequestForDeliveryRow) (dbq.GetRequestForDeliveryRow, error) {
+	o, err := w.Queries.GetDeliveryOverride(ctx, deliveryID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return req, nil
+	}
+	if err != nil {
+		return req, fmt.Errorf("load replay override: %w", err)
+	}
+	req.Method, req.Path, req.Query, req.Headers = o.Method, o.Path, o.Query, o.Headers
+	req.BodyInline, req.BodyS3Key = o.Body, nil
+	req.ContentType = nil // the edited headers carry it
+	return req, nil
 }
 
 func (w *Worker) body(ctx context.Context, req dbq.GetRequestForDeliveryRow) ([]byte, error) {

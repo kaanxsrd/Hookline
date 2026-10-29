@@ -7,6 +7,7 @@ import { destinationRouter } from "./destination";
 import { endpointRouter } from "./endpoint";
 import { memberRouter } from "./member";
 import { orgRouter } from "./org";
+import { replayRouter } from "./replay";
 import { requestRouter } from "./request";
 import { streamRouter } from "./stream";
 
@@ -18,6 +19,7 @@ export const appRouter = router({
   endpoint: endpointRouter,
   member: memberRouter,
   org: orgRouter,
+  replay: replayRouter,
   request: requestRouter,
   stream: streamRouter,
 });

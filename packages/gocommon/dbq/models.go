@@ -683,6 +683,16 @@ type DeliveryAttempt struct {
 	CreatedAt       time.Time
 }
 
+type DeliveryOverride struct {
+	DeliveryID uuid.UUID
+	Method     string
+	Path       string
+	Query      json.RawMessage
+	Headers    json.RawMessage
+	Body       []byte
+	CreatedAt  time.Time
+}
+
 type Destination struct {
 	ID                       uuid.UUID
 	EndpointID               uuid.UUID

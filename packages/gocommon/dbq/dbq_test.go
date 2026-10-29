@@ -65,17 +65,20 @@ func TestEndpointConstraints(t *testing.T) {
 	ctx := t.Context()
 
 	for name, stmt := range map[string]string{
-		"slug too short":        `INSERT INTO endpoint (org_id, slug, name) VALUES ($1, 'short', 'x')`,
-		"slug with symbols":     `INSERT INTO endpoint (org_id, slug, name) VALUES ($1, 'abc-def_1234', 'x')`,
-		"anonymous w/o expiry":  `INSERT INTO endpoint (slug, name) SELECT 'anonymous123', 'x' WHERE $1::uuid IS NOT NULL`,
-		"bad response status":   `INSERT INTO endpoint (org_id, slug, name, response_status) VALUES ($1, 'status999999', 'x', 999)`,
-		"provider w/o a secret": `INSERT INTO endpoint (org_id, slug, name, signature_provider) VALUES ($1, 'provider1234', 'x', 'stripe')`,
+		"slug too short":       `INSERT INTO endpoint (org_id, slug, name) VALUES ($1, 'short', 'x')`,
+		"slug with symbols":    `INSERT INTO endpoint (org_id, slug, name) VALUES ($1, 'abc-def_1234', 'x')`,
+		"anonymous w/o expiry": `INSERT INTO endpoint (slug, name) SELECT 'anonymous123', 'x' WHERE $1::uuid IS NOT NULL`,
+		"bad response status":  `INSERT INTO endpoint (org_id, slug, name, response_status) VALUES ($1, 'status999999', 'x', 999)`,
 	} {
 		_, err := f.pool.Exec(ctx, stmt, f.orgID)
 		var pgErr *pgconn.PgError
 		require.ErrorAs(t, err, &pgErr, name)
 		assert.Equal(t, "23514", pgErr.Code, "%s: want check_violation", name)
 	}
+
+	// Templates pick a provider before the user has a secret; requests stay unchecked until then.
+	_, err := f.pool.Exec(ctx, `INSERT INTO endpoint (org_id, slug, name, signature_provider) VALUES ($1, 'provider1234', 'x', 'stripe')`, f.orgID)
+	require.NoError(t, err)
 }
 
 func TestInsertRequestRoundTrip(t *testing.T) {

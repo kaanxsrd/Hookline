@@ -285,7 +285,8 @@ func (c *Client) session(ctx context.Context) (time.Time, time.Duration, error) 
 			if !c.seen.add(req.ID) {
 				continue // replayed and live copies of the same request
 			}
-			if req.ID > c.LastRequestID() { // UUIDv7 strings sort by time
+			// Resume after captured requests only; replay frames are not rows.
+			if req.ReplayOf == "" && req.ID > c.LastRequestID() { // UUIDv7 strings sort by time
 				c.lastID.Store(req.ID)
 			}
 			if c.OnRequest != nil {

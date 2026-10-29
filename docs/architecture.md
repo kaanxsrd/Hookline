@@ -91,6 +91,12 @@ In development the web app and the edge are different origins; the stream answer
 
 The CLI signs in with the device flow (RFC 8628): it shows a code, the user approves it at `/cli/authorize` and picks an organization, and the CLI receives an API key once. Keys are `hk_live_` plus 43 base62 characters; only their SHA-256 hash and an 8-character prefix are stored. The edge checks keys itself (`services/edge/internal/apikey`); the web app checks them for `/api/v1`.
 
+## Signatures and replay
+
+- **Verification** happens at capture: the edge decrypts the endpoint's secret and runs the provider's scheme (`packages/gocommon/signatures`), storing `verified` or `invalid` on the request. Requests are never rejected for a bad signature; the sender always gets the configured response. The web app has a TypeScript twin (`apps/web/lib/signatures.ts`) for "test against the last request"; both are tested against one vector file.
+- **Replay to a destination** inserts a delivery with trigger `replay` and goes through the worker like any other delivery. **Edit & replay** stores the edited method, path, query, headers and body in `delivery_override`, which the worker uses instead of the captured request. Sensitive header values never travel to the browser: left masked, they are filled in from the capture on the server.
+- **Replay to the CLI** publishes a tunnel `request` frame with a new ID and `replay_of` on the endpoint's tunnel channel.
+
 ## Forwarding
 
 1. **Enqueue.** When intake stores a request it evaluates each enabled destination's filter (`gocommon/destfilter`) and, in the same transaction, inserts a `delivery` row and a River `deliver` job per match. A crash can never leave a request without its deliveries, or a job without its row. Manual retries and tests from the web app insert their rows and jobs in one transaction too, using River's own insert and `LISTEN/NOTIFY` wake-up (`apps/web/lib/jobs.ts`).

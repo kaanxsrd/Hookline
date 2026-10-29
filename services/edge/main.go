@@ -122,6 +122,7 @@ func run() error {
 		Tunnels:   &tunnel.Relay{RDB: rdb, Responses: responseHub},
 		Counters:  ctrs,
 		IPs:       clientip.New(cfg.TrustedProxies),
+		Secrets:   cfg.Secrets,
 		Metrics:   m,
 		Logger:    logger,
 	})

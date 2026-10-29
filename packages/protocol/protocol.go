@@ -158,6 +158,9 @@ type Request struct {
 	SyncDeadlineMS int `json:"sync_deadline_ms,omitempty"`
 	// Replayed marks requests caught up after a reconnect.
 	Replayed bool `json:"replayed,omitempty"`
+	// ReplayOf is set when a captured request is sent again from the
+	// dashboard or API; ID is then new, so clients do not de-duplicate it.
+	ReplayOf string `json:"replay_of,omitempty"`
 }
 
 // Response is the local target's answer to a request.

@@ -224,3 +224,72 @@ func (c *Client) CreateEndpoint(ctx context.Context, name string) (Endpoint, err
 func (c *Client) DeleteEndpoint(ctx context.Context, ref string) error {
 	return c.do(ctx, http.MethodDelete, "/api/v1/endpoints/"+url.PathEscape(ref), nil, nil)
 }
+
+// Request is a captured request with its body.
+type Request struct {
+	ID       string `json:"id"`
+	Endpoint struct {
+		ID   string `json:"id"`
+		Slug string `json:"slug"`
+	} `json:"endpoint"`
+	Method      string      `json:"method"`
+	Path        string      `json:"path"`
+	Query       [][2]string `json:"query"`
+	Headers     [][2]string `json:"headers"`
+	ContentType *string     `json:"content_type"`
+	BodySize    int         `json:"body_size"`
+	BodyB64     *string     `json:"body_b64"`
+	BodyOmitted bool        `json:"body_omitted"`
+	ReceivedAt  time.Time   `json:"received_at"`
+}
+
+// GetRequest fetches a captured request.
+func (c *Client) GetRequest(ctx context.Context, id string) (Request, error) {
+	var out Request
+	err := c.do(ctx, http.MethodGet, "/api/v1/requests/"+url.PathEscape(id), nil, &out)
+	return out, err
+}
+
+// Override is an edited request for a replay.
+type Override struct {
+	Method  string      `json:"method"`
+	Path    string      `json:"path"`
+	Query   string      `json:"query"`
+	Headers [][2]string `json:"headers"`
+	BodyB64 *string     `json:"body_b64,omitempty"`
+}
+
+// ReplayResult says where a replay went.
+type ReplayResult struct {
+	Target     string `json:"target"`
+	Receivers  int    `json:"receivers"`
+	DeliveryID string `json:"delivery_id"`
+}
+
+// Replay sends a captured request to a destination (destinationID) or, with
+// an empty destinationID, to the connected CLIs.
+func (c *Client) Replay(ctx context.Context, id, destinationID string, override *Override) (ReplayResult, error) {
+	body := map[string]any{"target": "cli"}
+	if destinationID != "" {
+		body["target"] = map[string]string{"destination_id": destinationID}
+	}
+	if override != nil {
+		body["override"] = override
+	}
+	var out ReplayResult
+	err := c.do(ctx, http.MethodPost, "/api/v1/requests/"+url.PathEscape(id)+"/replay", body, &out)
+	return out, err
+}
+
+// SignatureSecret is an endpoint's verification setup.
+type SignatureSecret struct {
+	Provider string `json:"provider"`
+	Secret   string `json:"secret"`
+}
+
+// GetSignatureSecret fetches the endpoint's signature provider and secret.
+func (c *Client) GetSignatureSecret(ctx context.Context, ref string) (SignatureSecret, error) {
+	var out SignatureSecret
+	err := c.do(ctx, http.MethodGet, "/api/v1/endpoints/"+url.PathEscape(ref)+"/signature-secret", nil, &out)
+	return out, err
+}

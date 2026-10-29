@@ -19,6 +19,7 @@ import { BodyViewer } from "./body-viewer";
 import { DeliveriesTimeline } from "./deliveries-timeline";
 import { MethodChip } from "./method-chip";
 import { RelativeTime } from "./relative-time";
+import { type ReplayActions, ReplayMenu } from "./replay-menu";
 import type { RequestDetail as Detail } from "./types";
 
 export type DetailTab = "body" | "headers" | "query" | "deliveries" | "meta";
@@ -34,6 +35,9 @@ type Props = {
   onReveal: () => Promise<void>;
   onDelete?: (() => Promise<void>) | undefined;
   onRetryDelivery?: ((deliveryId: string) => Promise<void>) | undefined;
+  replay?: ReplayActions | undefined;
+  replayOpen?: boolean;
+  onReplayOpenChange?: (open: boolean) => void;
 };
 
 export function copyable(detail: Detail): CopyableRequest {
@@ -66,6 +70,9 @@ export function RequestDetail({
   onReveal,
   onDelete,
   onRetryDelivery,
+  replay,
+  replayOpen = false,
+  onReplayOpenChange,
 }: Props) {
   const [revealing, setRevealing] = useState(false);
 
@@ -103,6 +110,14 @@ export function RequestDetail({
           <SignatureBadge status={detail.signature_status} />
         </div>
         <div className="flex flex-wrap gap-2">
+          {replay && (
+            <ReplayMenu
+              requestId={detail.id}
+              actions={replay}
+              open={replayOpen}
+              onOpenChange={(open) => onReplayOpenChange?.(open)}
+            />
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">

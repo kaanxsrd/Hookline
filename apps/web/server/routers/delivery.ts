@@ -3,9 +3,7 @@ import { type Db, schema } from "@hookline/db";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, lt, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
-import type { DeliveryStatus } from "@/components/inbox/types";
-import { enqueueDeliveries } from "@/lib/jobs";
-import { publishEndpointEvent } from "@/lib/redis";
+import { insertDeliveries } from "@/lib/deliveries";
 import { orgProcedure, router } from "../trpc/init";
 
 const dlv = schema.delivery;
@@ -44,53 +42,9 @@ function filterWhere(orgId: string, f: z.infer<typeof filterSchema>): SQL {
   return and(...parts) as SQL;
 }
 
-/**
- * Inserts new manual deliveries (selected by `source`, which must yield
- * request_id, request_received_at, destination_id, endpoint_id) and their
- * jobs in one transaction, then tells open inboxes. Timestamps are copied in
- * SQL: JavaScript dates would drop the microseconds that locate the request.
- */
-export async function insertManualDeliveries(
-  db: Db,
-  orgId: string,
-  source: SQL,
-): Promise<string[]> {
-  const rows = await db.transaction(async (tx) => {
-    const inserted = await tx.execute<{ id: string; request_id: string; endpoint_id: string }>(sql`
-      INSERT INTO delivery (request_id, request_received_at, destination_id, endpoint_id, org_id, trigger)
-      SELECT s.request_id, s.request_received_at, s.destination_id, s.endpoint_id, ${orgId}, 'manual'
-      FROM (${source}) AS s
-      RETURNING id, request_id, endpoint_id`);
-    const list = [...inserted];
-    await enqueueDeliveries(
-      tx,
-      list.map((r) => r.id),
-    );
-    return list;
-  });
-  if (rows.length === 0) return [];
-
-  const requestIds = [...new Set(rows.map((r) => r.request_id))];
-  const statuses = await db
-    .select({
-      requestId: dlv.requestId,
-      statuses: sql<DeliveryStatus[]>`array_agg(${dlv.status} ORDER BY ${dlv.createdAt})`,
-    })
-    .from(dlv)
-    .where(inArray(dlv.requestId, requestIds))
-    .groupBy(dlv.requestId);
-  const byRequest = new Map(statuses.map((s) => [s.requestId, s.statuses]));
-  await Promise.all(
-    rows.map((r) =>
-      publishEndpointEvent(r.endpoint_id, "delivery", {
-        request_id: r.request_id,
-        delivery_id: r.id,
-        status: "pending",
-        statuses: byRequest.get(r.request_id) ?? ["pending"],
-      }),
-    ),
-  );
-  return rows.map((r) => r.id);
+/** New manual deliveries (see insertDeliveries). */
+export function insertManualDeliveries(db: Db, orgId: string, source: SQL): Promise<string[]> {
+  return insertDeliveries(db, orgId, source, { trigger: "manual" });
 }
 
 /** Copies of these deliveries' targets, as an insertManualDeliveries source. */

@@ -36,6 +36,8 @@ import (
 	"github.com/kaanxsrd/hookline/packages/gocommon/httpx"
 	"github.com/kaanxsrd/hookline/packages/gocommon/jobs"
 	"github.com/kaanxsrd/hookline/packages/gocommon/logging"
+	"github.com/kaanxsrd/hookline/packages/gocommon/secretbox"
+	"github.com/kaanxsrd/hookline/packages/gocommon/signatures"
 	"github.com/kaanxsrd/hookline/packages/protocol"
 	"github.com/kaanxsrd/hookline/services/edge/internal/counters"
 	"github.com/kaanxsrd/hookline/services/edge/internal/endpoints"
@@ -73,9 +75,11 @@ type Deps struct {
 	Tunnels   TunnelRelay
 	Counters  *counters.Counters
 	IPs       *clientip.Resolver
-	Metrics   *metrics.Metrics
-	Logger    *slog.Logger
-	Now       func() time.Time
+	// Secrets decrypts endpoint signature secrets; nil leaves every request unchecked.
+	Secrets *secretbox.Box
+	Metrics *metrics.Metrics
+	Logger  *slog.Logger
+	Now     func() time.Time
 }
 
 // Handler serves intake requests.
@@ -197,7 +201,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		BodySize:        int32(len(body)), //nolint:gosec // bounded by the plan's body cap
 		BodySha256:      sum[:],
 		UserAgent:       nonEmpty(r.UserAgent()),
-		SignatureStatus: dbq.SignatureStatusUnchecked,
+		SignatureStatus: h.verify(ctx, ep, headerPairs(r), body, start),
 	}
 	if ip.IsValid() {
 		params.SourceIp = &ip
@@ -378,6 +382,24 @@ func (h *Handler) publish(ctx context.Context, ep endpoints.Endpoint, p dbq.Inse
 	if err := h.Publisher.PublishRequest(pubCtx, s); err != nil {
 		h.degrade(ctx, "redis", "publish", err)
 	}
+}
+
+// verify checks the request's signature when the endpoint has a provider and
+// a secret configured.
+func (h *Handler) verify(ctx context.Context, ep endpoints.Endpoint, headers []Pair, body []byte, now time.Time) dbq.SignatureStatus {
+	if ep.SignatureProvider == nil || ep.SignatureSecretEnc == nil || h.Secrets == nil {
+		return dbq.SignatureStatusUnchecked
+	}
+	secret, err := h.Secrets.Open(*ep.SignatureSecretEnc, signatures.SecretContext(ep.ID.String()))
+	if err != nil {
+		// A rotated-away key or a corrupt envelope: say so once, keep capturing.
+		h.Logger.WarnContext(ctx, "cannot decrypt endpoint signature secret", "endpoint_id", ep.ID, "error", err)
+		return dbq.SignatureStatusUnchecked
+	}
+	if signatures.Verify(signatures.Provider(*ep.SignatureProvider), secret, signatures.Input{Headers: headers, Body: body, Now: now}).Verified {
+		return dbq.SignatureStatusVerified
+	}
+	return dbq.SignatureStatusInvalid
 }
 
 // awaitTunnel offers a sync-mode request to the endpoint's CLIs and returns

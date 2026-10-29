@@ -152,6 +152,36 @@ test("log in with the device flow, listen with the CLI and forward to localhost"
     await expect
       .poll(() => stdout)
       .toMatch(/POST\s+\/h\/\w+\/stripe\?live=1\s+→ 200 .*payment_intent\.succeeded/);
+
+    // Replay ▾ → To connected CLI sends it through the tunnel again.
+    await page.getByTestId("request-row").first().click();
+    const detail = page.getByRole("article", { name: "Request detail" });
+    await detail.getByRole("button", { name: /^Replay/ }).click();
+    await page.getByRole("menuitem", { name: /To connected CLI/ }).click();
+    await expect.poll(() => received.length, { timeout: 20_000 }).toBe(2);
+    expect(received[1]?.body).toBe(received[0]?.body);
+    await expect.poll(() => stdout).toContain("(replay)");
+
+    // `hookline trigger` signs a sample event with the endpoint's secret.
+    await page.goto(`${inbox}/settings`);
+    await hydrated(page, "Save verification");
+    await page.getByLabel("Signature provider").click();
+    await page.getByRole("option", { name: "Generic HMAC-SHA256" }).click();
+    await page.getByLabel("Shared secret").fill("trigger-secret");
+    await page.getByRole("button", { name: "Save verification" }).click();
+    await expect(page.getByText("Verification saved")).toBeVisible();
+    const trigger = execFileSync(cliBinary, ["trigger", slug, "generic.json", "--json"], {
+      env: {
+        ...process.env,
+        HOOKLINE_URL: "http://localhost:3000",
+        HOOKLINE_API_KEY: login.api_key,
+        NO_COLOR: "1",
+      },
+    }).toString();
+    expect(JSON.parse(trigger)).toMatchObject({ event: "generic.json", status: 200 });
+    await page.goto(inbox);
+    await expect(page.getByTestId("request-row").first()).toContainText("/events");
+    await expect(page.getByTestId("request-row").first()).toContainText("Verified");
   } finally {
     cli?.kill();
     local.close();

@@ -18,6 +18,7 @@ import { matchesLive } from "./live-filter";
 import { LiveStatusBadge } from "./live-status";
 import { MethodChip } from "./method-chip";
 import { RelativeTime } from "./relative-time";
+import type { ReplayActions } from "./replay-menu";
 import { copyable, copyText, type DetailTab, RequestDetail } from "./request-detail";
 import type {
   DeliveryStatus,
@@ -38,6 +39,8 @@ export type InboxSource = {
   remove?: ((id: string) => Promise<void>) | undefined;
   /** Sends a delivery's request to its destination again (members only). */
   retryDelivery?: ((deliveryId: string) => Promise<void>) | undefined;
+  /** Replays requests to destinations or CLIs (members only). */
+  replay?: ReplayActions | undefined;
   bodyUrl: (id: string) => string;
   permalink?: ((id: string) => string) | undefined;
   canReveal: boolean;
@@ -72,6 +75,7 @@ export function Inbox({
   initialTunnels,
 }: Props) {
   const [tunnels, setTunnels] = useState(initialTunnels);
+  const [replayOpen, setReplayOpen] = useState(false);
   const queryClient = useQueryClient();
   const [filterState, setFilter] = useState<RequestFilter>({});
   const [range, setRange] = useState<TimeRange>("all");
@@ -230,6 +234,12 @@ export function Inbox({
         case "c":
           if (detail.data) copyText(toCurl(copyable(detail.data)), "as cURL");
           break;
+        case "r":
+          if (detail.data && source.replay) {
+            e.preventDefault();
+            setReplayOpen(true);
+          }
+          break;
         case "Escape":
           select(undefined);
           break;
@@ -239,7 +249,7 @@ export function Inbox({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [move, detail.data, select]);
+  }, [move, detail.data, select, source.replay]);
 
   const wide = useMediaQuery("(min-width: 1024px)");
   const detailPane = selectedId ? (
@@ -251,6 +261,9 @@ export function Inbox({
         downloadUrl={source.bodyUrl(detail.data.id)}
         permalink={source.permalink?.(detail.data.id)}
         canReveal={source.canReveal}
+        replay={source.replay}
+        replayOpen={replayOpen}
+        onReplayOpenChange={setReplayOpen}
         onRetryDelivery={
           source.retryDelivery
             ? async (deliveryId) => {

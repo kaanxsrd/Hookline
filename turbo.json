@@ -12,13 +12,28 @@
       "persistent": true
     },
     "lint": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/.golangci.yml"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/.golangci.yml",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/packages/gocommon/**",
+        "$TURBO_ROOT$/packages/protocol/**",
+        "$TURBO_ROOT$/cli/**"
+      ]
     },
     "typecheck": {
       "dependsOn": ["^typecheck"]
     },
     "test": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/db/migrations/**"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/db/migrations/**",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/packages/gocommon/**",
+        "$TURBO_ROOT$/packages/protocol/**",
+        "$TURBO_ROOT$/cli/**",
+        "$TURBO_ROOT$/packages/shared/fixtures/**"
+      ]
     }
   }
 }

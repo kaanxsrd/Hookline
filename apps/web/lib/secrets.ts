@@ -14,6 +14,11 @@ export function destinationSigningContext(destinationId: string): string {
   return `destination.signing_secret:${destinationId}`;
 }
 
+/** Associated data binding an endpoint's signature secret to it (matches the edge). */
+export function endpointSignatureContext(endpointId: string): string {
+  return `endpoint.signature_secret:${endpointId}`;
+}
+
 export function sealSecret(plaintext: string, context: string): string {
   return seal(activeKeys(), plaintext, context);
 }

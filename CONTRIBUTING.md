@@ -8,7 +8,7 @@ Follow the [quick start](README.md#quick-start). You need Bun 1.3+, Go 1.27+ and
 
 ## How the monorepo fits together
 
-- **Bun workspaces + Turborepo** drive everything. Each Go module (`cli`, `services/*`, `packages/gocommon`) has a small `package.json` so `turbo run dev | lint | test` covers Go and TypeScript alike.
+- **Bun workspaces + Turborepo** drive everything. Each Go module (`cli`, `services/*`, `packages/gocommon`, `packages/protocol`) has a small `package.json` so `turbo run dev | lint | test` covers Go and TypeScript alike. Go modules depend on each other through `replace` directives Turborepo cannot see, so `turbo.json` lists the shared Go sources (and the signature test vectors in `packages/shared/fixtures`) as inputs of `lint` and `test`.
 - **`scripts/go.ts`** is the bridge: it runs air (`dev`), golangci-lint (`lint`) and `go test` (`test`). It adds `-race` whenever cgo has a C compiler; CI always does.
 - **Go tools are pinned** with `tool` directives in `tools/go.mod`. That module sits outside `go.work` so tool dependencies never change the services' build lists. Tools are installed into `.tools/bin` on first use and reinstalled automatically when `tools/go.sum` or the Go version changes. To add one: `cd tools && GOWORK=off go get -tool <module>/cmd/<name>@<version>`.
 - **One `.env` at the root** configures every service in development. Next.js loads it in `next.config.ts`; `scripts/go.ts dev` passes it to the Go services. Real environment variables always win.

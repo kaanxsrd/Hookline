@@ -19,23 +19,24 @@ Authorization: Bearer hk_live_...
 
 Every frame is one JSON **text** message with a `type`. Receivers ignore fields they do not know and frame types they do not know, so additions never break older peers. Incompatible changes get a new version (`hookline.v2`).
 
-| Direction  | Type       | Fields                                                                                                                                                                                                          |
-| ---------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CLI → edge | `hello`    | `protocol: 1`, `cli_version`, `endpoints: [slug]` (1–10), `sync: bool`, `last_request_id?`                                                                                                                      |
-| edge → CLI | `ready`    | `session_id`, `endpoints: [{id, slug, url, name, response_mode}]`, `limits: {max_message_bytes, ping_interval_ms, concurrent_tunnels}`                                                                          |
-| edge → CLI | `request`  | `id`, `endpoint_id`, `method`, `path` (below `/h/{slug}`), `query` (raw, no `?`), `headers` (`[[name, value], ...]`), `body_b64`, `body_size`, `received_at`, `body_omitted?`, `sync_deadline_ms?`, `replayed?` |
-| CLI → edge | `response` | `id` (the request's), `status` (200–599), `headers`, `body_b64`, `duration_ms`                                                                                                                                  |
-| both       | `error`    | `id?` (the request it concerns), `code`, `message`                                                                                                                                                              |
-| both       | `ping`     | (none); answer with `pong`                                                                                                                                                                                      |
-| both       | `pong`     | (none)                                                                                                                                                                                                          |
-| edge → CLI | `goaway`   | `reason`, `reconnect_after_ms`                                                                                                                                                                                  |
+| Direction  | Type       | Fields                                                                                                                                                                                                                        |
+| ---------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI → edge | `hello`    | `protocol: 1`, `cli_version`, `endpoints: [slug]` (1–10), `sync: bool`, `last_request_id?`                                                                                                                                    |
+| edge → CLI | `ready`    | `session_id`, `endpoints: [{id, slug, url, name, response_mode}]`, `limits: {max_message_bytes, ping_interval_ms, concurrent_tunnels}`                                                                                        |
+| edge → CLI | `request`  | `id`, `endpoint_id`, `method`, `path` (below `/h/{slug}`), `query` (raw, no `?`), `headers` (`[[name, value], ...]`), `body_b64`, `body_size`, `received_at`, `body_omitted?`, `sync_deadline_ms?`, `replayed?`, `replay_of?` |
+| CLI → edge | `response` | `id` (the request's), `status` (200–599), `headers`, `body_b64`, `duration_ms`                                                                                                                                                |
+| both       | `error`    | `id?` (the request it concerns), `code`, `message`                                                                                                                                                                            |
+| both       | `ping`     | (none); answer with `pong`                                                                                                                                                                                                    |
+| both       | `pong`     | (none)                                                                                                                                                                                                                        |
+| edge → CLI | `goaway`   | `reason`, `reconnect_after_ms`                                                                                                                                                                                                |
 
 ### Session
 
 1. The client sends `hello` within 10 seconds. The edge checks that every slug belongs to the key's organization and that the organization has a free tunnel slot (plan limit `concurrent_tunnels`, counted across all edge instances).
 2. The edge answers `ready`, then streams `request` frames as the endpoints capture them.
 3. With `last_request_id` (the newest request the client saw before a reconnect), the edge first replays newer requests, at most 100 and at most 10 minutes old, marked `"replayed": true`. A request can arrive both replayed and live; clients de-duplicate by `id`.
-4. Bodies travel base64-encoded. A body that would not fit in a frame (over about 720 KiB) is left out: `body_omitted: true`, `body_size` is the real size, and the client forwards the request without it.
+4. A request sent again from the dashboard or API ("replay to CLI") arrives as a `request` frame with a new `id` and `replay_of` set to the captured request's ID. It is never a sync request.
+5. Bodies travel base64-encoded. A body that would not fit in a frame (over about 720 KiB) is left out: `body_omitted: true`, `body_size` is the real size, and the client forwards the request without it.
 
 ### Answers and sync mode
 

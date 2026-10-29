@@ -13,6 +13,34 @@ import (
 	"github.com/google/uuid"
 )
 
+const getDeliveryOverride = `-- name: GetDeliveryOverride :one
+SELECT method, path, query, headers, body
+FROM delivery_override
+WHERE delivery_id = $1
+`
+
+type GetDeliveryOverrideRow struct {
+	Method  string
+	Path    string
+	Query   json.RawMessage
+	Headers json.RawMessage
+	Body    []byte
+}
+
+// The edited request of an "edit & replay" delivery, if any.
+func (q *Queries) GetDeliveryOverride(ctx context.Context, deliveryID uuid.UUID) (GetDeliveryOverrideRow, error) {
+	row := q.db.QueryRow(ctx, getDeliveryOverride, deliveryID)
+	var i GetDeliveryOverrideRow
+	err := row.Scan(
+		&i.Method,
+		&i.Path,
+		&i.Query,
+		&i.Headers,
+		&i.Body,
+	)
+	return i, err
+}
+
 const getDeliveryWork = `-- name: GetDeliveryWork :one
 SELECT d.id, d.status, d.attempt_count, d.trigger, d.request_id, d.request_received_at,
        d.endpoint_id, d.org_id,

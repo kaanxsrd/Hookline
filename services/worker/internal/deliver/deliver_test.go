@@ -377,3 +377,36 @@ func TestMissingDeliveryIsIgnored(t *testing.T) {
 	e := newEnv(t, true)
 	require.NoError(t, e.work(uuid.New()))
 }
+
+func TestEditedReplaySendsTheOverride(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, true)
+	var got *http.Request
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Clone(context.WithoutCancel(r.Context()))
+		gotBody, _ = io.ReadAll(r.Body)
+	}))
+	defer srv.Close()
+
+	id := e.delivery(srv.URL, 3, requestOpts{method: "POST", path: "/original", body: []byte(`{"amount":1}`)}, "")
+	_, err := e.pool.Exec(t.Context(), `
+		INSERT INTO delivery_override (delivery_id, method, path, query, headers, body)
+		VALUES ($1, 'PATCH', '/edited', '[["v","2"]]', '[["Content-Type","text/plain"],["X-Edited","yes"]]', 'edited body')`, id)
+	require.NoError(t, err)
+	require.NoError(t, e.work(id))
+
+	require.NotNil(t, got)
+	assert.Equal(t, "PATCH", got.Method)
+	assert.Equal(t, "/edited", got.URL.Path)
+	assert.Equal(t, "v=2", got.URL.RawQuery)
+	assert.Equal(t, "text/plain", got.Header.Get("Content-Type"))
+	assert.Equal(t, "yes", got.Header.Get("X-Edited"))
+	assert.Equal(t, "edited body", string(gotBody))
+
+	var method string
+	var body []byte
+	require.NoError(t, e.pool.QueryRow(t.Context(), `SELECT method, body_inline FROM request LIMIT 1`).Scan(&method, &body))
+	assert.Equal(t, "POST", method, "the captured request is untouched")
+	assert.JSONEq(t, `{"amount":1}`, string(body))
+}

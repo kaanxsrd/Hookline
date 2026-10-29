@@ -27,6 +27,8 @@ import (
 	"github.com/kaanxsrd/hookline/packages/gocommon/dbtest"
 	"github.com/kaanxsrd/hookline/packages/gocommon/httpx"
 	"github.com/kaanxsrd/hookline/packages/gocommon/logging"
+	"github.com/kaanxsrd/hookline/packages/gocommon/secretbox"
+	"github.com/kaanxsrd/hookline/packages/gocommon/signatures"
 	"github.com/kaanxsrd/hookline/services/edge/internal/counters"
 	"github.com/kaanxsrd/hookline/services/edge/internal/endpoints"
 	"github.com/kaanxsrd/hookline/services/edge/internal/intake"
@@ -74,6 +76,7 @@ func newEnv(t *testing.T) *env {
 		Publisher: live.NewPublisher(rdb),
 		Counters:  e.counters,
 		IPs:       clientip.New(trusted),
+		Secrets:   testSecrets,
 		Metrics:   e.metrics,
 		Logger:    logging.Discard(),
 	})
@@ -498,4 +501,48 @@ func TestMatchingDestinationsGetDeliveriesAndJobs(t *testing.T) {
 		SELECT count(*) FROM river_job WHERE kind = 'deliver' AND queue = 'deliveries'
 		  AND (args->>'delivery_id')::uuid IN (SELECT id FROM delivery WHERE request_id = $1)`, reqID).Scan(&jobs))
 	assert.Equal(t, 2, jobs, "one job per delivery, inserted in the intake transaction")
+}
+
+var testSecrets = func() *secretbox.Box {
+	b, err := secretbox.Parse("k1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")
+	if err != nil {
+		panic(err)
+	}
+	return b
+}()
+
+func TestSignaturesAreVerifiedAtCapture(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	epID := e.endpoint(endpointOpts{})
+	secret := "It's a Secret to Everybody"
+	sealed, err := testSecrets.Seal(secret, signatures.SecretContext(epID.String()))
+	require.NoError(t, err)
+	_, err = e.pool.Exec(t.Context(), `UPDATE endpoint SET signature_provider = 'github', signature_secret_enc = $2 WHERE id = $1`, epID, sealed)
+	require.NoError(t, err)
+
+	status := func(sig string) string {
+		w := e.send("POST", "/h/abcdefABCDEF", strings.NewReader("Hello, World!"), map[string]string{"X-Hub-Signature-256": sig})
+		require.Equal(t, http.StatusOK, w.Code)
+		var s string
+		require.NoError(t, e.pool.QueryRow(t.Context(), `SELECT signature_status FROM request WHERE id = $1`,
+			w.Header().Get(httpx.RequestIDHeader)).Scan(&s))
+		return s
+	}
+	assert.Equal(t, "verified", status("sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17"))
+	assert.Equal(t, "invalid", status("sha256=0000000000000000000000000000000000000000000000000000000000000000"))
+
+	// A provider picked by a template, without a secret yet, checks nothing.
+	_, err = e.pool.Exec(t.Context(), `UPDATE endpoint SET signature_secret_enc = NULL WHERE id = $1`, epID)
+	require.NoError(t, err)
+	e.mr.Del(endpoints.CacheKey("abcdefABCDEF"))
+	assert.Equal(t, "unchecked", status("sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17"))
+
+	// An envelope sealed for another endpoint does not open here.
+	other, err := testSecrets.Seal(secret, signatures.SecretContext(uuid.NewString()))
+	require.NoError(t, err)
+	_, err = e.pool.Exec(t.Context(), `UPDATE endpoint SET signature_secret_enc = $2 WHERE id = $1`, epID, other)
+	require.NoError(t, err)
+	e.mr.Del(endpoints.CacheKey("abcdefABCDEF"))
+	assert.Equal(t, "unchecked", status("sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17"))
 }

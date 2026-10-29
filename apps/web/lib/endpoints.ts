@@ -5,27 +5,37 @@ import type { Limits } from "@hookline/shared";
 import { count, eq } from "drizzle-orm";
 import { orgPlan } from "./plans";
 import { newSlug } from "./random";
+import type { SignatureProvider } from "./signatures";
 
 const e = schema.endpoint;
 
 export const ENDPOINT_TEMPLATES = ["generic", "stripe", "github", "shopify", "discord"] as const;
 export type EndpointTemplate = (typeof ENDPOINT_TEMPLATES)[number];
 
-/** Default responses that keep each provider happy. Signature checks are configured separately. */
-const templateResponses: Record<
+/**
+ * Defaults that keep each provider happy: the response it expects and its
+ * signature scheme (verification starts once the secret is added).
+ */
+const templates: Record<
   EndpointTemplate,
-  { status: number; headers: Pair[]; body: string }
+  { status: number; headers: Pair[]; body: string; provider: SignatureProvider | null }
 > = {
-  generic: { status: 200, headers: [], body: "" },
+  generic: { status: 200, headers: [], body: "", provider: null },
   stripe: {
     status: 200,
     headers: [["Content-Type", "application/json"]],
     body: '{"received":true}',
+    provider: "stripe",
   },
-  github: { status: 202, headers: [], body: "" },
-  shopify: { status: 200, headers: [], body: "" },
+  github: { status: 202, headers: [], body: "", provider: "github" },
+  shopify: { status: 200, headers: [], body: "", provider: "shopify" },
   // Discord interactions expect a PONG ({"type":1}) to their PING.
-  discord: { status: 200, headers: [["Content-Type", "application/json"]], body: '{"type":1}' },
+  discord: {
+    status: 200,
+    headers: [["Content-Type", "application/json"]],
+    body: '{"type":1}',
+    provider: "discord",
+  },
 };
 
 /** A plan limit stopped the action; the message is shown to the user. */
@@ -51,7 +61,7 @@ export async function insertEndpoint(
   limits: Limits,
   input: { name: string; description: string; template: EndpointTemplate },
 ): Promise<{ id: string; slug: string }> {
-  const response = templateResponses[input.template];
+  const template = templates[input.template];
   for (let attempt = 0; attempt < 3; attempt++) {
     const [row] = await db
       .insert(e)
@@ -60,9 +70,10 @@ export async function insertEndpoint(
         slug: newSlug(),
         name: input.name,
         description: input.description,
-        responseStatus: response.status,
-        responseHeaders: response.headers,
-        responseBody: response.body,
+        responseStatus: template.status,
+        responseHeaders: template.headers,
+        responseBody: template.body,
+        signatureProvider: template.provider,
         retentionHours: limits.retention_hours,
       })
       .onConflictDoNothing({ target: e.slug })

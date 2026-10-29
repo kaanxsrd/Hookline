@@ -2,7 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import { Field, FormMessage, SubmitButton } from "@/components/auth/form-bits";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ import { useTRPC } from "@/lib/trpc/client";
 type Props = {
   orgSlug: string;
   canEdit: boolean;
+  /** Sections shown between General and the danger zone. */
+  children?: ReactNode;
   endpoint: {
     slug: string;
     name: string;
@@ -32,7 +34,7 @@ type Props = {
   };
 };
 
-export function EndpointSettingsForm({ orgSlug, canEdit, endpoint }: Props) {
+export function EndpointSettingsForm({ orgSlug, canEdit, endpoint, children }: Props) {
   const router = useRouter();
   const trpc = useTRPC();
   const update = useMutation(trpc.endpoint.update.mutationOptions());
@@ -95,6 +97,8 @@ export function EndpointSettingsForm({ orgSlug, canEdit, endpoint }: Props) {
           )}
         </form>
       </section>
+
+      {children}
 
       {canEdit && endpoint.status !== "disabled_by_admin" && (
         <section className="grid gap-3">

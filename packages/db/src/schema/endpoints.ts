@@ -40,6 +40,7 @@ export const endpoint = pgTable(
     responseDelayMs: integer("response_delay_ms").notNull().default(0),
     syncTimeoutMs: integer("sync_timeout_ms").notNull().default(10_000),
 
+    /** Requests stay unchecked until a secret is set too (templates pick the provider first). */
     signatureProvider: signatureProvider("signature_provider"),
     /** AES-256-GCM envelope produced with DATA_ENCRYPTION_KEY (includes the key ID). */
     signatureSecretEnc: text("signature_secret_enc"),
@@ -71,10 +72,6 @@ export const endpoint = pgTable(
     check("endpoint_response_delay_check", sql`${t.responseDelayMs} BETWEEN 0 AND 30000`),
     check("endpoint_sync_timeout_check", sql`${t.syncTimeoutMs} BETWEEN 1000 AND 30000`),
     check("endpoint_retention_check", sql`${t.retentionHours} >= 1`),
-    check(
-      "endpoint_signature_check",
-      sql`${t.signatureProvider} IS NULL OR ${t.signatureSecretEnc} IS NOT NULL`,
-    ),
   ],
 );
 

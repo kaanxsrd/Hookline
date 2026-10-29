@@ -49,6 +49,22 @@ export function EndpointInbox(props: Props) {
             await client.request.delete.mutate({ orgSlug, endpointSlug, id });
           }
         : undefined,
+      replay: canDelete
+        ? {
+            targets: () => client.replay.targets.query({ orgSlug, endpointSlug }),
+            draft: (id) => client.replay.draft.query({ orgSlug, endpointSlug, id }),
+            toDestination: (id, destinationId, edit) =>
+              client.replay.toDestination.mutate({
+                orgSlug,
+                endpointSlug,
+                id,
+                destinationId,
+                ...(edit ? { edit } : {}),
+              }),
+            toCli: (id, edit) =>
+              client.replay.toCli.mutate({ orgSlug, endpointSlug, id, ...(edit ? { edit } : {}) }),
+          }
+        : undefined,
       retryDelivery: canDelete
         ? async (id: string) => {
             await client.delivery.retry.mutate({ orgSlug, id });

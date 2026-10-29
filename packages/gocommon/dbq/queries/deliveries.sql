@@ -32,3 +32,9 @@ WHERE id = $1;
 
 -- name: ListRequestDeliveryStatuses :many
 SELECT status FROM delivery WHERE request_id = $1 ORDER BY created_at;
+
+-- name: GetDeliveryOverride :one
+-- The edited request of an "edit & replay" delivery, if any.
+SELECT method, path, query, headers, body
+FROM delivery_override
+WHERE delivery_id = $1;
