@@ -11,6 +11,16 @@ const schema = z.object({
   /** Signs Better Auth sessions and tokens. */
   BETTER_AUTH_SECRET: z.string().min(32),
   SMTP_URL: z.string().min(1).default("smtp://localhost:1025"),
+  /** Object storage for bodies over 64 KiB (read here for previews and downloads). */
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().default("us-east-1"),
+  S3_BUCKET: z.string().default(""),
+  S3_ACCESS_KEY_ID: z.string().default(""),
+  S3_SECRET_ACCESS_KEY: z.string().default(""),
+  S3_FORCE_PATH_STYLE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
   MAIL_FROM: z.string().min(3).default("Hookline <no-reply@hookline.localhost>"),
   /** Better Auth's sign-in/sign-up rate limits. Only development and tests turn them off. */
   AUTH_RATE_LIMIT_ENABLED: z

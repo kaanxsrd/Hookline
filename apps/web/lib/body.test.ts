@@ -1,38 +1,60 @@
 import { describe, expect, it } from "vitest";
-import { describeBody, formatBytes } from "./body";
+import { bodyText, detectKind, formatBytes, hexDump, parseForm, prettyXml } from "./body";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
-describe("describeBody", () => {
-  it("handles empty bodies", () => {
-    expect(describeBody(null, null)).toEqual({ kind: "empty" });
-    expect(describeBody(new Uint8Array(), "text/plain")).toEqual({ kind: "empty" });
+describe("detectKind", () => {
+  it.each([
+    ["", undefined, "empty"],
+    ['{"a":1}', "application/json", "json"],
+    ["[1,2]", undefined, "json"],
+    ["{oops", "application/json", "text"],
+    ["a=1&b=2", "application/x-www-form-urlencoded", "form"],
+    ['<?xml version="1.0"?><a/>', undefined, "xml"],
+    ["<note><to>x</to></note>", "text/plain", "xml"],
+    ["<script>alert(1)</script>", "text/html", "xml"],
+    ["hello", "text/plain", "text"],
+  ])("%j (%s) -> %s", (body, ct, kind) => {
+    expect(detectKind(enc(body), ct)).toBe(kind);
   });
 
-  it("pretty-prints JSON by content type or shape", () => {
-    expect(describeBody(enc('{"a":1}'), "application/json")).toEqual({
-      kind: "json",
-      text: '{\n  "a": 1\n}',
-    });
-    expect(describeBody(enc("[1]"), null)).toMatchObject({ kind: "json" });
+  it("treats invalid UTF-8 and control characters as binary", () => {
+    expect(detectKind(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), "image/png")).toBe("binary");
+    expect(detectKind(enc("a\u0000b"), "text/plain")).toBe("binary");
+    expect(bodyText(enc("tab\tand\nnewline"))).toBe("tab\tand\nnewline");
+  });
+});
+
+describe("parseForm", () => {
+  it("keeps order, repeats and decoding", () => {
+    expect(parseForm("a=1&b=two+words&a=%26")).toEqual([
+      ["a", "1"],
+      ["b", "two words"],
+      ["a", "&"],
+    ]);
+  });
+});
+
+describe("prettyXml", () => {
+  it("indents nested elements and keeps text inline", () => {
+    expect(prettyXml("<a><b>x</b><c><d/></c></a>")).toBe(
+      ["<a>", "  <b>x</b>", "  <c>", "    <d/>", "  </c>", "</a>"].join("\n"),
+    );
   });
 
-  it("falls back to text for invalid JSON and HTML", () => {
-    expect(describeBody(enc("{oops"), "application/json")).toEqual({ kind: "text", text: "{oops" });
-    expect(describeBody(enc("<script>x</script>"), "text/html")).toEqual({
-      kind: "text",
-      text: "<script>x</script>",
-    });
+  it("keeps declarations and attributes", () => {
+    expect(prettyXml('<?xml version="1.0"?><n id="1"><t>v</t></n>')).toBe(
+      ['<?xml version="1.0"?>', '<n id="1">', "  <t>v</t>", "</n>"].join("\n"),
+    );
   });
+});
 
-  it("shows binary as a hex dump", () => {
-    const view = describeBody(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 1]), "image/png");
-    expect(view.kind).toBe("binary");
-    if (view.kind === "binary") {
-      expect(view.hex).toBe(`00000000  89 50 4e 47 00 01${" ".repeat(30)}  .PNG..`);
-      expect(view.truncated).toBe(false);
-    }
-    expect(describeBody(enc("a\u0000b"), "text/plain").kind).toBe("binary");
+describe("hexDump", () => {
+  it("formats offsets, bytes and ASCII", () => {
+    const { text, truncated } = hexDump(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 1]));
+    expect(text).toBe(`00000000  89 50 4e 47 00 01${" ".repeat(30)}  .PNG..`);
+    expect(truncated).toBe(false);
+    expect(hexDump(new Uint8Array(20), 16).truncated).toBe(true);
   });
 });
 

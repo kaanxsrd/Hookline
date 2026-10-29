@@ -46,7 +46,9 @@ export default async function EndpointsPage({ params }: { params: Promise<{ orgS
           status: e.status,
           requestCount: e.requestCount,
           lastRequestAt: e.lastRequestAt?.toISOString() ?? null,
+          last24h: e.last24h,
         }))}
+        canEdit={canCreate}
       />
     </PageBody>
   );

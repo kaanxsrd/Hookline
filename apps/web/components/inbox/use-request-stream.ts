@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { RequestSummary } from "./types";
+import type { DeliveryStatus, RequestSummary } from "./types";
 
 export type LiveStatus = "connecting" | "live" | "reconnecting";
 
@@ -12,21 +12,27 @@ export type StreamAccess = {
   expiresAt: number;
 };
 
-type Options = {
-  /** Requests already rendered, newest first. */
-  initial: RequestSummary[];
-  /**
-   * A UUIDv7 from shortly before the page rendered. When `initial` is empty
-   * it is the resume point, so requests arriving before the stream connects
-   * are replayed rather than lost.
-   */
-  since: string;
-  /** Fetches a fresh stream URL and token (they expire after five minutes). */
-  getAccess: () => Promise<StreamAccess>;
-  /** Called when the server says too many events were missed to replay. */
+/** A delivery changed status; `statuses` are all of the request's deliveries, in order. */
+export type DeliveryEvent = {
+  request_id: string;
+  delivery_id: string;
+  status: DeliveryStatus;
+  statuses: DeliveryStatus[];
+};
+
+type Handlers = {
+  onRequest: (summary: RequestSummary) => void;
+  onDelivery?: (event: DeliveryEvent) => void;
+  onEndpoint?: (changes: Record<string, unknown>) => void;
+  /** More requests were missed than the edge replays; reload the list. */
   onResync?: () => void;
-  /** Most rows kept in memory. */
-  limit?: number;
+};
+
+type Options = Handlers & {
+  /** Fetches a stream URL and token (they expire after five minutes). */
+  getAccess: () => Promise<StreamAccess>;
+  /** Resume point: the newest request already shown, or a UUIDv7 from before the page rendered. */
+  since: string;
 };
 
 const MIN_BACKOFF_MS = 1_000;
@@ -35,23 +41,22 @@ const MAX_BACKOFF_MS = 30_000;
 const TOKEN_REUSE_MARGIN_MS = 60_000;
 
 /**
- * Keeps a newest-first list of requests in sync with the edge's SSE stream.
+ * Holds the SSE connection to the edge for one endpoint.
  *
  * EventSource's own reconnect would eventually reuse an expired token, so
  * errors close the source and reconnect with last_event_id after an
  * exponential backoff with jitter; the edge replays what was missed. Tokens
- * are reused while they are fresh, so a reconnect is a single request.
+ * are reused while fresh, the stream drops as soon as the browser reports
+ * `offline`, and comes back on `online`.
  */
-export function useLiveRequests({ initial, since, getAccess, onResync, limit = 500 }: Options) {
-  const [requests, setRequests] = useState(initial);
+export function useRequestStream({ getAccess, since, ...handlers }: Options): LiveStatus {
   const [status, setStatus] = useState<LiveStatus>("connecting");
-
   // Callbacks change identity on every render; the connection must not.
   const access = useRef(getAccess);
-  const resync = useRef(onResync);
+  const on = useRef(handlers);
   access.current = getAccess;
-  resync.current = onResync;
-  const lastId = useRef(initial[0]?.id ?? since);
+  on.current = handlers;
+  const lastId = useRef(since);
 
   useEffect(() => {
     let source: EventSource | null = null;
@@ -64,6 +69,12 @@ export function useLiveRequests({ initial, since, getAccess, onResync, limit = 5
       if (cached && cached.expiresAt - Date.now() > TOKEN_REUSE_MARGIN_MS) return cached;
       cached = await access.current();
       return cached;
+    };
+
+    const nextBackoff = () => {
+      const delay = backoff;
+      backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
+      return delay / 2 + Math.random() * (delay / 2);
     };
 
     const schedule = (delay: number) => {
@@ -87,7 +98,7 @@ export function useLiveRequests({ initial, since, getAccess, onResync, limit = 5
       if (stopped) return;
       const url = new URL(target.url);
       url.searchParams.set("token", target.token);
-      if (lastId.current) url.searchParams.set("last_event_id", lastId.current);
+      url.searchParams.set("last_event_id", lastId.current);
 
       const es = new EventSource(url);
       source = es;
@@ -102,28 +113,23 @@ export function useLiveRequests({ initial, since, getAccess, onResync, limit = 5
         if (!opened) cached = null;
         schedule(nextBackoff());
       };
+      const data = (e: Event) => JSON.parse((e as MessageEvent<string>).data) as unknown;
       es.addEventListener("request", (e) => {
-        const summary = JSON.parse((e as MessageEvent<string>).data) as RequestSummary;
+        const summary = data(e) as RequestSummary;
         lastId.current = summary.id;
-        setRequests((prev) =>
-          prev.some((r) => r.id === summary.id) ? prev : [summary, ...prev].slice(0, limit),
-        );
+        on.current.onRequest(summary);
       });
-      es.addEventListener("resync", () => resync.current?.());
+      es.addEventListener("delivery", (e) => on.current.onDelivery?.(data(e) as DeliveryEvent));
+      es.addEventListener("endpoint", (e) =>
+        on.current.onEndpoint?.(data(e) as Record<string, unknown>),
+      );
+      es.addEventListener("resync", () => on.current.onResync?.());
       es.addEventListener("reconnect", (e) => {
-        const { retry_ms } = JSON.parse((e as MessageEvent<string>).data) as { retry_ms?: number };
+        const { retry_ms } = data(e) as { retry_ms?: number };
         schedule(retry_ms ?? MIN_BACKOFF_MS);
       });
     }
 
-    function nextBackoff(): number {
-      const delay = backoff;
-      backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
-      return delay / 2 + Math.random() * (delay / 2);
-    }
-
-    // The browser knows about lost connectivity before TCP does: drop the
-    // stream right away, then reconnect (and replay) as soon as it is back.
     const onOffline = () => {
       clearTimeout(timer);
       source?.close();
@@ -145,7 +151,7 @@ export function useLiveRequests({ initial, since, getAccess, onResync, limit = 5
       window.removeEventListener("offline", onOffline);
       window.removeEventListener("online", onOnline);
     };
-  }, [limit]);
+  }, []);
 
-  return { requests, status };
+  return status;
 }

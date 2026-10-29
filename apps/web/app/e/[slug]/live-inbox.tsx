@@ -3,9 +3,10 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LiveRequestList } from "@/components/inbox/live-request-list";
-import type { RequestSummary } from "@/components/inbox/types";
-import { anonymousRequestDetail, anonymousStreamAccess } from "./actions";
+import { useMemo } from "react";
+import { Inbox, type InboxSource } from "@/components/inbox/inbox";
+import type { RequestPage } from "@/components/inbox/types";
+import { anonymousRequestDetail, anonymousRequestList, anonymousStreamAccess } from "./actions";
 
 type Props = {
   slug: string;
@@ -13,14 +14,29 @@ type Props = {
   shareToken: string | undefined;
   /** Whether this browser created the endpoint (and may claim it). */
   isCreator: boolean;
-  initial: RequestSummary[];
+  initial: RequestPage;
   since: string;
+  selectedId: string | undefined;
 };
 
-export function LiveInbox({ slug, shareToken, isCreator, initial, since }: Props) {
+/** The inbox of a temporary endpoint: the same component as the dashboard, without member actions. */
+export function LiveInbox({ slug, shareToken, isCreator, initial, since, selectedId }: Props) {
   const router = useRouter();
+  const source = useMemo<InboxSource>(
+    () => ({
+      key: `anonymous:${slug}`,
+      list: (filter, cursor) => anonymousRequestList(slug, shareToken, filter, cursor),
+      get: (id, reveal) => anonymousRequestDetail(slug, shareToken, id, reveal),
+      streamAccess: () => anonymousStreamAccess(slug, shareToken),
+      bodyUrl: (id) =>
+        `/api/anonymous/${slug}/requests/${id}/body${shareToken ? `?t=${encodeURIComponent(shareToken)}` : ""}`,
+      canReveal: true,
+    }),
+    [slug, shareToken],
+  );
+
   return (
-    <div className="mt-10 grid gap-6">
+    <div className="mt-8 flex min-h-[70dvh] flex-col gap-4">
       {isCreator && (
         <div className="bg-primary/10 border-primary/30 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm">
           <span>This endpoint disappears in 24 hours. Sign up to keep it and its requests.</span>
@@ -32,13 +48,12 @@ export function LiveInbox({ slug, shareToken, isCreator, initial, since }: Props
           </Link>
         </div>
       )}
-      <LiveRequestList
+      <Inbox
+        source={source}
         initial={initial}
         since={since}
-        getAccess={() => anonymousStreamAccess(slug, shareToken)}
-        loadDetail={(id) => anonymousRequestDetail(slug, shareToken, id)}
+        initialSelectedId={selectedId}
         onResync={() => router.refresh()}
-        emptyText="Waiting for the first request. Send one to the URL above; it appears here instantly."
       />
     </div>
   );

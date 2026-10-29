@@ -13,6 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1159.0",
     "@better-auth/passkey": "1.7.14",
     "@hookline/db": "workspace:*",
     "@hookline/shared": "workspace:*",

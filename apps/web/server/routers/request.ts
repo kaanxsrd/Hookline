@@ -1,59 +1,79 @@
 import "server-only";
-import { schema } from "@hookline/db";
+import { type Db, schema } from "@hookline/db";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, lt } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { detailColumns, summaryColumns, toDetail, toSummary } from "@/lib/requests";
+import { writeAudit } from "@/lib/audit";
+import { hasRole } from "@/lib/permissions";
+import {
+  deleteRequest,
+  type EndpointRef,
+  getRequestDetail,
+  listInputSchema,
+  listRequests,
+} from "@/lib/requests";
 import { orgProcedure, router } from "../trpc/init";
 
-const r = schema.request;
-
-async function endpointId(
-  ctx: { db: import("@hookline/db").Db; org: { id: string } },
+/** The endpoint `slug` of the caller's organization, or NOT_FOUND. */
+export async function orgEndpoint(
+  ctx: { db: Db; org: { id: string } },
   slug: string,
-): Promise<string> {
+): Promise<EndpointRef> {
   const [ep] = await ctx.db
-    .select({ id: schema.endpoint.id })
+    .select({ id: schema.endpoint.id, slug: schema.endpoint.slug })
     .from(schema.endpoint)
     .where(and(eq(schema.endpoint.slug, slug), eq(schema.endpoint.orgId, ctx.org.id)));
   if (!ep) throw new TRPCError({ code: "NOT_FOUND", message: "Endpoint not found." });
-  return ep.id;
+  return ep;
 }
 
 export const requestRouter = router({
-  /** Newest first. The cursor is the last request ID of the previous page (IDs are time-ordered). */
+  /** Newest first, filtered. The cursor is the last request ID of the previous page. */
   list: orgProcedure
-    .input(
-      z.object({
-        endpointSlug: z.string(),
-        cursor: z.uuid().optional(),
-        limit: z.number().int().min(1).max(200).default(100),
-      }),
-    )
+    .input(listInputSchema.extend({ endpointSlug: z.string() }))
+    .query(async ({ ctx, input }) =>
+      listRequests(ctx.db, await orgEndpoint(ctx, input.endpointSlug), input),
+    ),
+
+  /**
+   * One request. Sensitive headers stay masked unless `reveal`, which needs
+   * the member role and is written to the audit log.
+   */
+  get: orgProcedure
+    .input(z.object({ endpointSlug: z.string(), id: z.uuid(), reveal: z.boolean().default(false) }))
     .query(async ({ ctx, input }) => {
-      const id = await endpointId(ctx, input.endpointSlug);
-      const rows = await ctx.db
-        .select(summaryColumns)
-        .from(r)
-        .where(and(eq(r.endpointId, id), input.cursor ? lt(r.id, input.cursor) : undefined))
-        .orderBy(desc(r.id))
-        .limit(input.limit + 1);
-      const page = rows.slice(0, input.limit);
-      return {
-        items: page.map(toSummary),
-        nextCursor: rows.length > input.limit ? page.at(-1)?.id : undefined,
-      };
+      if (input.reveal && !hasRole(ctx.member.role, "member")) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Viewers cannot reveal sensitive headers.",
+        });
+      }
+      const endpoint = await orgEndpoint(ctx, input.endpointSlug);
+      const detail = await getRequestDetail(ctx.db, endpoint, input.id, { reveal: input.reveal });
+      if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "Request not found." });
+      if (input.reveal && detail.headers.length > 0) {
+        await writeAudit(ctx.db, {
+          orgId: ctx.org.id,
+          actorUserId: ctx.user.id,
+          action: "request.headers_revealed",
+          targetType: "request",
+          targetId: input.id,
+          metadata: { endpoint: endpoint.slug },
+          ip: ctx.ip,
+        });
+      }
+      return detail;
     }),
 
-  get: orgProcedure
+  delete: orgProcedure
+    .meta({ role: "member" })
     .input(z.object({ endpointSlug: z.string(), id: z.uuid() }))
-    .query(async ({ ctx, input }) => {
-      const id = await endpointId(ctx, input.endpointSlug);
-      const [row] = await ctx.db
-        .select(detailColumns)
-        .from(r)
-        .where(and(eq(r.id, input.id), eq(r.endpointId, id)));
-      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Request not found." });
-      return toDetail(row);
+    .mutation(async ({ ctx, input }) => {
+      const endpoint = await orgEndpoint(ctx, input.endpointSlug);
+      if (!(await deleteRequest(ctx.db, endpoint, input.id))) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Request not found." });
+      }
+      ctx.audit({ type: "request", id: input.id, metadata: { endpoint: endpoint.slug } });
+      return { ok: true };
     }),
 });

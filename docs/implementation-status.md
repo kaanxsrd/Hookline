@@ -13,7 +13,7 @@ Legend: ✅ done · 🚧 partially done (see note) · ⬜ not started
 | 3   | Intake                           | ✅     |
 | 4   | Live stream                      | ✅     |
 | 5   | Auth & orgs                      | ✅     |
-| 6   | Inbox                            | ⬜     |
+| 6   | Inbox                            | ✅     |
 | 7   | Destinations & worker            | ⬜     |
 | 8   | CLI & tunnel                     | ⬜     |
 | 9   | Replay, verification & responses | ⬜     |
@@ -130,6 +130,29 @@ Legend: ✅ done · 🚧 partially done (see note) · ⬜ not started
 | Tests                                | ✅     | Playwright: sign-up → verify → onboarding → endpoint → live requests; claim a temporary endpoint; Free-plan seat limit, invite a viewer who then cannot create endpoints or read the audit log; 2FA sign-in; passkey sign-in; auth redirect. Vitest: roles, slugs, stream tokens, helpers              |
 | `user.is_admin` area                 | ⬜     | Milestone 12                                                                                                                                                                                                                                                                                           |
 
-## 6–14
+## 6. Inbox
+
+| Feature                              | Status | Notes                                                                                                                                                                                                                                     |
+| ------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Virtualized request list             | ✅     | TanStack Virtual, infinite scroll by cursor, 52 px rows: method chip, path, status sent back, size, relative time, signature badge, delivery dots                                                                                         |
+| Live updates with an "N new" pill    | ✅     | Live requests are kept from page load and filtered for display; held behind the pill while scrolled away or paused; delivery events update the dots                                                                                       |
+| Filters                              | ✅     | Method, signature status, delivery status (including "not forwarded"), time range, full-text search over the path and inline bodies (trigram index)                                                                                       |
+| Keyboard                             | ✅     | `j`/`k` move, `c` copies cURL, `/` focuses search, `p` pauses live updates, `Esc` closes. `r` (replay) arrives with replay in milestone 9                                                                                                 |
+| Body views                           | ✅     | JSON tree (collapsible, click a key to copy its JSONPath, large arrays paged), form fields, indented XML, raw, hex; bodies are only ever rendered as text                                                                                 |
+| Large bodies                         | ✅     | Bodies over 64 KiB are previewed from object storage (first 64 KiB, marked truncated) and downloaded in full                                                                                                                              |
+| Headers with masking                 | ✅     | Authorization, cookies, signatures, tokens, secrets and HMACs masked; Reveal (member+) refetches with values and writes `request.headers_revealed` to the audit log; anonymous view-token holders can reveal their own endpoint's headers |
+| Query, Deliveries, Meta tabs         | ✅     | Delivery attempt timeline with response previews; meta shows ID, time, IP, user agent, URL, size, SHA-256 and processing time                                                                                                             |
+| Copy as cURL / fetch / HTTPie        | ✅     | Transport headers dropped, safe shell quoting, binary bodies referenced as a file                                                                                                                                                         |
+| Download                             | ✅     | Always `application/octet-stream` attachments with `nosniff` and a sandbox CSP                                                                                                                                                            |
+| Delete                               | ✅     | Member+, audited                                                                                                                                                                                                                          |
+| Deep links                           | ✅     | `/[org]/endpoints/[slug]/requests/[id]` and `?request=` (selection is kept in the URL without a server round trip)                                                                                                                        |
+| Same component for anonymous inboxes | ✅     | `/e/[slug]` uses the inbox through server actions; member-only actions are hidden                                                                                                                                                         |
+| Endpoint list                        | ✅     | 24-hour sparkline per endpoint, bulk pause, resume and delete (confirmed, audited)                                                                                                                                                        |
+| Mobile                               | ✅     | Detail opens in a sheet below 1024 px                                                                                                                                                                                                     |
+| Replay menu                          | ⬜     | Milestone 9                                                                                                                                                                                                                               |
+| Connected CLI count                  | ⬜     | Milestone 8 (tunnels)                                                                                                                                                                                                                     |
+| Tests                                | ✅     | Playwright: filters, search, keyboard, reveal + audit, copy as cURL, download, deep link, delete, pause pill, bulk pause, large body via MinIO. Vitest: body detection, XML, hex, copy-as quoting, JSONPath, live filtering               |
+
+## 7–14
 
 Not started. Each section is filled in as its milestone lands.

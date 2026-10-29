@@ -1,37 +1,17 @@
 /**
- * Turns a captured body into something safe to display. Bodies are always
- * rendered as text (React escapes it); nothing is ever interpreted as HTML.
+ * Turns captured bodies into views. Everything is rendered as text (React
+ * escapes it); a body is never interpreted as HTML.
  */
 
-export type BodyView =
-  | { kind: "empty" }
-  | { kind: "json"; text: string }
-  | { kind: "text"; text: string }
-  | { kind: "binary"; hex: string; truncated: boolean };
+export type BodyKind = "json" | "form" | "xml" | "text" | "binary" | "empty";
 
-const HEX_PREVIEW_BYTES = 512;
+const strictUtf8 = new TextDecoder("utf-8", { fatal: true });
 
-export function describeBody(bytes: Uint8Array | null, contentType: string | null): BodyView {
-  if (!bytes || bytes.length === 0) return { kind: "empty" };
-
-  let text: string;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    return binary(bytes);
-  }
-  // Valid UTF-8 can still be binary (e.g. NUL-padded formats).
-  if (hasControlCharacters(text)) return binary(bytes);
-
-  const looksJson = /json/i.test(contentType ?? "") || /^\s*[[{]/.test(text);
-  if (looksJson) {
-    try {
-      return { kind: "json", text: JSON.stringify(JSON.parse(text), null, 2) };
-    } catch {
-      // Not actually JSON; show it as text.
-    }
-  }
-  return { kind: "text", text };
+export function decodeBase64(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
 }
 
 /** C0 control characters other than tab, newline, vertical tab, form feed and carriage return. */
@@ -43,8 +23,61 @@ function hasControlCharacters(text: string): boolean {
   return false;
 }
 
-function binary(bytes: Uint8Array): BodyView {
-  const shown = bytes.subarray(0, HEX_PREVIEW_BYTES);
+/** The body as text, or null when it is not valid, printable UTF-8. */
+export function bodyText(bytes: Uint8Array): string | null {
+  try {
+    const text = strictUtf8.decode(bytes);
+    return hasControlCharacters(text) ? null : text;
+  } catch {
+    return null;
+  }
+}
+
+/** The best view for a body, from its bytes and content type. */
+export function detectKind(bytes: Uint8Array, contentType: string | null | undefined): BodyKind {
+  if (bytes.length === 0) return "empty";
+  const text = bodyText(bytes);
+  if (text === null) return "binary";
+  const ct = (contentType ?? "").toLowerCase();
+  if (ct.includes("json") || /^\s*[[{]/.test(text)) {
+    try {
+      JSON.parse(text);
+      return "json";
+    } catch {
+      // Truncated or malformed: fall through.
+    }
+  }
+  if (ct.includes("x-www-form-urlencoded")) return "form";
+  if (ct.includes("xml") || /^\s*<\?xml|^\s*<[A-Za-z][\w:.-]*[\s>]/.test(text)) return "xml";
+  return "text";
+}
+
+/** Form fields in order; repeated names are kept. */
+export function parseForm(text: string): [string, string][] {
+  return [...new URLSearchParams(text)];
+}
+
+/** Indents XML for reading. Only whitespace between tags changes. */
+export function prettyXml(xml: string): string {
+  const tokens = xml.replace(/>\s+</g, "><").split(/(?=<)|(?<=>)/);
+  let depth = 0;
+  const lines: string[] = [];
+  for (const raw of tokens) {
+    const token = raw.trim();
+    if (!token) continue;
+    if (/^<\//.test(token)) depth = Math.max(0, depth - 1);
+    lines.push(`${"  ".repeat(depth)}${token}`);
+    if (/^<[^!?/][^>]*[^/]>$/.test(token) || /^<[A-Za-z][\w:.-]*>$/.test(token)) depth++;
+  }
+  // Put text content back on the line of its opening tag: <a>\n  text\n</a> -> <a>text</a>.
+  return lines
+    .join("\n")
+    .replace(/(<([A-Za-z][\w:.-]*)[^>]*>)\n\s*([^<\n]+)\n\s*(<\/\2>)/g, "$1$3$4");
+}
+
+/** Classic 16-bytes-per-line hex dump with an ASCII column. */
+export function hexDump(bytes: Uint8Array, max = 4096): { text: string; truncated: boolean } {
+  const shown = bytes.subarray(0, max);
   const lines: string[] = [];
   for (let offset = 0; offset < shown.length; offset += 16) {
     const row = shown.subarray(offset, offset + 16);
@@ -54,7 +87,7 @@ function binary(bytes: Uint8Array): BodyView {
     ).join("");
     lines.push(`${offset.toString(16).padStart(8, "0")}  ${hex.padEnd(47)}  ${ascii}`);
   }
-  return { kind: "binary", hex: lines.join("\n"), truncated: bytes.length > HEX_PREVIEW_BYTES };
+  return { text: lines.join("\n"), truncated: bytes.length > max };
 }
 
 /** 1536 -> "1.5 KB". */

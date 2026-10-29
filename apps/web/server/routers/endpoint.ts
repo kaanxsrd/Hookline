@@ -2,7 +2,7 @@ import "server-only";
 import { schema } from "@hookline/db";
 import type { Pair } from "@hookline/db/schema";
 import { TRPCError } from "@trpc/server";
-import { and, count, desc, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { authorizeAnonymous, parseVisitorCookie, VISITOR_COOKIE } from "@/lib/anonymous";
@@ -78,7 +78,34 @@ export const endpointRouter = router({
       .from(e)
       .where(eq(e.orgId, ctx.org.id))
       .orderBy(desc(e.createdAt));
-    return rows.map((r) => ({ ...r, url: intakeUrl(r.slug) }));
+
+    // Requests per hour over the last 24 hours, oldest bucket first.
+    const buckets = await ctx.db
+      .select({
+        endpointId: schema.request.endpointId,
+        hoursAgo: sql<number>`floor(extract(epoch from (now() - ${schema.request.receivedAt})) / 3600)::int`,
+        n: count(),
+      })
+      .from(schema.request)
+      .where(
+        and(
+          eq(schema.request.orgId, ctx.org.id),
+          gte(schema.request.receivedAt, sql`now() - interval '24 hours'`),
+        ),
+      )
+      .groupBy(sql`1, 2`);
+    const sparklines = new Map<string, number[]>();
+    for (const b of buckets) {
+      const line = sparklines.get(b.endpointId) ?? Array.from({ length: 24 }, () => 0);
+      const index = 23 - Math.min(23, Math.max(0, b.hoursAgo));
+      line[index] = (line[index] ?? 0) + b.n;
+      sparklines.set(b.endpointId, line);
+    }
+    return rows.map((r) => ({
+      ...r,
+      url: intakeUrl(r.slug),
+      last24h: sparklines.get(r.id) ?? Array.from({ length: 24 }, () => 0),
+    }));
   }),
 
   get: orgProcedure.input(z.object({ slug: slugInput })).query(async ({ ctx, input }) => {
@@ -197,6 +224,58 @@ export const endpointRouter = router({
         metadata: { slug: current.slug, name: current.name },
       });
       return { ok: true };
+    }),
+
+  /** Pauses or resumes several endpoints at once. */
+  bulkUpdate: orgProcedure
+    .meta({ role: "member", audit: "endpoint.bulk_status" })
+    .input(
+      z.object({ slugs: z.array(slugInput).min(1).max(100), status: z.enum(["active", "paused"]) }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const updated = await ctx.db
+        .update(e)
+        .set({ status: input.status })
+        .where(
+          and(
+            eq(e.orgId, ctx.org.id),
+            inArray(e.slug, input.slugs),
+            ne(e.status, "disabled_by_admin"),
+          ),
+        )
+        .returning({ id: e.id, slug: e.slug });
+      for (const u of updated) {
+        await invalidateEndpointCache(u.slug);
+        await publishEndpointEvent(u.id, "endpoint", { id: u.id, status: input.status });
+      }
+      ctx.audit({
+        type: "endpoint",
+        metadata: { slugs: updated.map((u) => u.slug), status: input.status },
+      });
+      return { updated: updated.length };
+    }),
+
+  /** Deletes several endpoints; `confirm` must equal the number of endpoints. */
+  bulkDelete: orgProcedure
+    .meta({ role: "member", audit: "endpoint.bulk_deleted" })
+    .input(z.object({ slugs: z.array(slugInput).min(1).max(100), confirm: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.confirm !== input.slugs.length) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Confirm the number of endpoints to delete.",
+        });
+      }
+      const deleted = await ctx.db
+        .delete(e)
+        .where(and(eq(e.orgId, ctx.org.id), inArray(e.slug, input.slugs)))
+        .returning({ id: e.id, slug: e.slug, name: e.name });
+      for (const d of deleted) await invalidateEndpointCache(d.slug);
+      ctx.audit({
+        type: "endpoint",
+        metadata: { endpoints: deleted.map((d) => ({ slug: d.slug, name: d.name })) },
+      });
+      return { deleted: deleted.length };
     }),
 
   /** Moves the visitor's temporary endpoint (proved by their cookie) into this organization. */

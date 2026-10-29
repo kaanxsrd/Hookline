@@ -1,4 +1,4 @@
-import type { LiveStatus } from "./use-live-requests";
+import type { LiveStatus } from "./use-request-stream";
 
 const labels: Record<LiveStatus, string> = {
   connecting: "Connecting…",

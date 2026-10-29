@@ -18,13 +18,14 @@ export function SignInForm() {
   async function onSubmit(form: FormData) {
     setPending(true);
     setError(null);
-    const { error } = await authClient.signIn.email({
+    const { data, error } = await authClient.signIn.email({
       email: String(form.get("email")),
       password: String(form.get("password")),
     });
     setPending(false);
-    // A two-factor challenge is handled by the plugin's redirect.
     if (error) setError(authErrorMessage(error));
+    // A two-factor challenge: the plugin navigates to /two-factor itself.
+    else if (data && "twoFactorRedirect" in data && data.twoFactorRedirect) return;
     else router.push(next);
   }
 

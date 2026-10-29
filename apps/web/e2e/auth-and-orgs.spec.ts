@@ -30,7 +30,7 @@ test("sign up, verify, onboard, create an endpoint and watch it live", async ({
   for (let i = 0; i < 3; i++) {
     expect((await request.post(`${url}/charge/${i}`, { data: { i } })).status()).toBe(200);
   }
-  await expect(page.getByTestId("request-row")).toHaveCount(3);
+  await expect(page.getByTestId("request-count")).toHaveText("3 requests");
 });
 
 test("a temporary endpoint can be kept by signing up", async ({ page, request }) => {
@@ -39,7 +39,7 @@ test("a temporary endpoint can be kept by signing up", async ({ page, request })
   const url = (await page.getByTestId("endpoint-url").textContent())?.trim() ?? "";
   const slug = url.split("/").at(-1) ?? "";
   for (let i = 0; i < 2; i++) await request.post(url, { data: { i } });
-  await expect(page.getByTestId("request-row")).toHaveCount(2);
+  await expect(page.getByTestId("request-count")).toHaveText("2 requests");
 
   await page.getByRole("link", { name: "Sign up to keep it" }).click();
   await signUp(page, request, { next: "/onboarding" });
@@ -48,7 +48,7 @@ test("a temporary endpoint can be kept by signing up", async ({ page, request })
   await page.getByRole("button", { name: "Keep my temporary endpoint" }).click();
 
   await expect(page).toHaveURL(new RegExp(`/endpoints/${slug}$`));
-  await expect(page.getByTestId("request-row")).toHaveCount(2);
+  await expect(page.getByTestId("request-count")).toHaveText("2 requests");
   // The anonymous inbox is gone; the URL itself keeps capturing.
   expect((await page.request.get(`/e/${slug}`)).status()).toBe(404);
   expect((await request.post(url, { data: {} })).status()).toBe(200);

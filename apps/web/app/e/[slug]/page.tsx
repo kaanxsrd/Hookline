@@ -1,5 +1,4 @@
-import { schema, uuidv7 } from "@hookline/db";
-import { and, desc, eq, gte } from "drizzle-orm";
+import { uuidv7 } from "@hookline/db";
 import { Clock } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -7,7 +6,7 @@ import { CopyButton } from "@/components/copy-button";
 import { resolveAnonymousAccess } from "@/lib/anonymous";
 import { getDb } from "@/lib/db";
 import { env, intakeUrl } from "@/lib/env";
-import { summaryColumns, toSummary } from "@/lib/requests";
+import { listRequests } from "@/lib/requests";
 import { LiveInbox } from "./live-inbox";
 
 export const metadata: Metadata = {
@@ -18,26 +17,23 @@ export const metadata: Metadata = {
 
 type Props = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ t?: string | string[] }>;
+  searchParams: Promise<{ t?: string | string[]; request?: string | string[] }>;
 };
 
 export default async function AnonymousInboxPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { t } = await searchParams;
+  const { t, request } = await searchParams;
   const shareToken = typeof t === "string" ? t : undefined;
 
   const access = await resolveAnonymousAccess(slug, shareToken);
   if (!access) notFound();
   const { endpoint, token } = access;
 
-  const r = schema.request;
-  const rows = await getDb()
-    .select(summaryColumns)
-    .from(r)
-    // The lower bound lets PostgreSQL skip partitions older than the endpoint.
-    .where(and(eq(r.endpointId, endpoint.id), gte(r.receivedAt, endpoint.createdAt)))
-    .orderBy(desc(r.id))
-    .limit(100);
+  const initial = await listRequests(
+    getDb(),
+    { id: endpoint.id, slug, createdAt: endpoint.createdAt },
+    { limit: 100 },
+  );
 
   const url = intakeUrl(slug);
   const shareUrl = `${env().APP_URL}/e/${slug}?t=${encodeURIComponent(token)}`;
@@ -45,7 +41,7 @@ export default async function AnonymousInboxPage({ params, searchParams }: Props
   const hoursLeft = Math.max(0, Math.ceil((endpoint.expiresAt.getTime() - Date.now()) / 3_600_000));
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6">
+    <main className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6">
       <header className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">Your temporary endpoint</h1>
@@ -86,8 +82,9 @@ export default async function AnonymousInboxPage({ params, searchParams }: Props
         slug={slug}
         shareToken={shareToken}
         isCreator={shareToken === undefined}
-        initial={rows.map(toSummary)}
+        initial={initial}
         since={uuidv7(new Date(Date.now() - 60_000))}
+        selectedId={typeof request === "string" ? request : undefined}
       />
     </main>
   );

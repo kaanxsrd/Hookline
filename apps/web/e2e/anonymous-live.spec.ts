@@ -12,8 +12,9 @@ test("a temporary endpoint shows requests live, including across a reconnect", a
 
   const status = page.getByTestId("live-status");
   const rows = page.getByTestId("request-row");
+  const count = page.getByTestId("request-count");
   await expect(status).toHaveAttribute("data-status", "live");
-  await expect(rows).toHaveCount(0);
+  await expect(count).toHaveText("0 requests");
 
   const send = async (i: number) => {
     const res = await request.post(`${endpointUrl}/e2e/${i}`, { data: { i } });
@@ -25,7 +26,7 @@ test("a temporary endpoint shows requests live, including across a reconnect", a
 
   const ids: string[] = [];
   for (let i = 0; i < 10; i++) ids.push(await send(i));
-  await expect(rows).toHaveCount(10);
+  await expect(count).toHaveText("10 requests");
 
   // Drop the connection, capture more while the page is offline, come back.
   await context.setOffline(true);
@@ -34,17 +35,19 @@ test("a temporary endpoint shows requests live, including across a reconnect", a
   await context.setOffline(false);
 
   await expect(status).toHaveAttribute("data-status", "live");
-  await expect(rows).toHaveCount(20);
-  // Every request exactly once, newest first.
+  await expect(count).toHaveText("20 requests");
+  // Every request exactly once, newest first (the list is virtualized: check what is rendered).
   const shown = await rows.evaluateAll((els) =>
     els.map((el) => el.getAttribute("data-request-id")),
   );
-  expect(shown).toEqual([...ids].reverse());
+  expect(shown.length).toBeGreaterThan(0);
+  expect(shown).toEqual([...ids].reverse().slice(0, shown.length));
 
-  // A row opens into its detail, with sensitive headers masked.
-  await rows.first().locator("summary").click();
-  await expect(rows.first()).toContainText("/e2e/19");
-  await expect(rows.first()).toContainText('"i": 19');
+  // Selecting a row opens its detail.
+  await rows.first().click();
+  const detail = page.getByRole("article", { name: "Request detail" });
+  await expect(detail).toContainText("/e2e/19");
+  await expect(detail.getByRole("button", { name: '"i"' })).toBeVisible();
 });
 
 test("revisiting /new returns to the same endpoint", async ({ page }) => {
