@@ -16,11 +16,9 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -32,6 +30,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/kaanxsrd/hookline/packages/gocommon/db"
+	"github.com/kaanxsrd/hookline/packages/gocommon/testdocker"
 )
 
 const image = "postgres:17.11-alpine"
@@ -51,43 +50,17 @@ var (
 //
 //	func TestMain(m *testing.M) { os.Exit(dbtest.Run(m)) }
 //
-// It runs the tests and then removes the PostgreSQL container.
-//
-// On Windows it prepares testcontainers for Docker Desktop: the reaper
-// (Ryuk) is disabled because its readiness check does not work over the named
-// pipe, and DOCKER_HOST is pinned to the active Docker context, because
-// testcontainers' host auto-detection intermittently fails when several test
-// binaries probe the pipe at once and then caches the failure. Elsewhere the
-// defaults stay, including the reaper as a safety net for crashed binaries.
+// It prepares Docker (see testdocker.Prepare), runs the tests and then
+// removes the PostgreSQL container.
 func Run(m *testing.M) int {
-	if runtime.GOOS == "windows" {
-		if os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
-			_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
-		}
-		if os.Getenv("DOCKER_HOST") == "" {
-			if host := dockerContextHost(); host != "" {
-				_ = os.Setenv("DOCKER_HOST", host)
-			}
-		}
-	}
+	testdocker.Prepare()
 	code := m.Run()
 	if container != nil {
 		if err := testcontainers.TerminateContainer(container); err != nil {
-			fmt.Fprintf(os.Stderr, "dbtest: terminate container: %v\n", err)
+			fmt.Fprintln(os.Stderr, "dbtest: terminate container:", err)
 		}
 	}
 	return code
-}
-
-// dockerContextHost returns the endpoint of the active Docker CLI context, or "".
-func dockerContextHost() string {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // New returns a pool connected to a fresh, migrated database.

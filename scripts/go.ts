@@ -13,10 +13,9 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { parseDotEnv } from "./lib/dotenv";
+import { join } from "node:path";
+import { type Env, repoRoot as root, rootEnv, run } from "./lib/proc";
 
-const root = resolve(import.meta.dir, "..");
 const toolsModule = join(root, "tools");
 const toolsHome = join(root, ".tools");
 const binDir = join(toolsHome, "bin");
@@ -24,27 +23,6 @@ const stampFile = join(toolsHome, "stamp");
 const lockDir = join(toolsHome, "lock");
 const exe = process.platform === "win32" ? ".exe" : "";
 const staleLockMs = 10 * 60 * 1000;
-
-type Env = Record<string, string | undefined>;
-
-async function run(cmd: string[], opts: { cwd?: string; env?: Env } = {}): Promise<number> {
-  const proc = Bun.spawn(cmd, {
-    cwd: opts.cwd ?? process.cwd(),
-    env: opts.env ?? process.env,
-    stdio: ["inherit", "inherit", "inherit"],
-  });
-  // Ctrl+C reaches the child through the terminal; stay alive until it exits
-  // so it can shut down gracefully.
-  const ignore = () => {};
-  process.on("SIGINT", ignore);
-  process.on("SIGTERM", ignore);
-  try {
-    return await proc.exited;
-  } finally {
-    process.off("SIGINT", ignore);
-    process.off("SIGTERM", ignore);
-  }
-}
 
 async function output(cmd: string[], cwd = root): Promise<string> {
   const proc = Bun.spawn(cmd, { cwd, stdout: "pipe", stderr: "inherit" });
@@ -133,18 +111,6 @@ async function tool(
   return run([bin, ...args], opts);
 }
 
-/** The root .env merged under the real environment, which always wins. */
-function devEnv(): Env {
-  const file = join(root, ".env");
-  if (!existsSync(file)) {
-    console.error(
-      "No .env found at the repository root; using defaults. Copy .env.example to .env.",
-    );
-    return process.env;
-  }
-  return { ...parseDotEnv(readFileSync(file, "utf8")), ...process.env };
-}
-
 async function raceSupported(): Promise<boolean> {
   const [cgo, cc] = (await output(["go", "env", "CGO_ENABLED", "CC"])).split(/\r?\n/);
   return cgo === "1" && !!cc && Bun.which(cc) !== null;
@@ -160,7 +126,7 @@ async function main(argv: string[]): Promise<number> {
       // air watches paths relative to the repository root (see .air.toml).
       return tool("air", ["-c", join(process.cwd(), ".air.toml"), ...args], {
         cwd: root,
-        env: devEnv(),
+        env: rootEnv(),
       });
     case "lint":
       // Turborepo lints several modules at once; golangci-lint locks by default.

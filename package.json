@@ -11,6 +11,7 @@
   "workspaces": [
     "apps/web",
     "packages/db",
+    "packages/shared",
     "services/edge",
     "services/worker",
     "cli",

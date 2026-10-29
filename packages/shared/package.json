@@ -1,0 +1,19 @@
+{
+  "name": "@hookline/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TypeScript code shared across Hookline packages: entitlements and contracts.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "typescript": "6.0.3"
+  }
+}

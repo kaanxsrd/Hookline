@@ -41,7 +41,7 @@ The first `bun run dev` or `bun run check` also builds the pinned Go tools (air,
 | `bun run db:seed`     | Loads demo data (safe to re-run)                     |
 | `bun run db:generate` | Generates a migration from schema changes            |
 | `bun run db:studio`   | Opens Drizzle Studio                                 |
-| `bun run gen`         | Regenerates derived code (sqlc)                      |
+| `bun run gen`         | Regenerates entitlements and sqlc code               |
 
 ## Repository layout
 
@@ -52,6 +52,8 @@ services/worker    Go: forwarding, retries, retention, rollups
 cli                Go: the hookline CLI
 packages/db        Drizzle schema, migrations and seed (the only owner of the schema)
 packages/gocommon  Go: config, logging, HTTP plumbing, sqlc queries shared by the Go services
+packages/shared    TypeScript: entitlements and helpers shared across packages
+config/plans.json  Plan limits (source of the generated Go and TypeScript entitlements)
 tools              Pinned Go developer tools (outside go.work)
 scripts            Repository scripts (Bun)
 docs               Architecture, protocol, threat model and status docs

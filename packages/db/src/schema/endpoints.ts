@@ -67,7 +67,7 @@ export const endpoint = pgTable(
       .where(sql`${t.orgId} IS NULL`),
     check("endpoint_slug_check", sql`${t.slug} ~ '^[0-9A-Za-z]{12}$'`),
     check("endpoint_owner_check", sql`${t.orgId} IS NOT NULL OR ${t.expiresAt} IS NOT NULL`),
-    check("endpoint_response_status_check", sql`${t.responseStatus} BETWEEN 100 AND 599`),
+    check("endpoint_response_status_check", sql`${t.responseStatus} BETWEEN 200 AND 599`),
     check("endpoint_response_delay_check", sql`${t.responseDelayMs} BETWEEN 0 AND 30000`),
     check("endpoint_sync_timeout_check", sql`${t.syncTimeoutMs} BETWEEN 1000 AND 30000`),
     check("endpoint_retention_check", sql`${t.retentionHours} >= 1`),

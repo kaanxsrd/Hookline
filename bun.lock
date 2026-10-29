@@ -15,13 +15,17 @@
       "name": "@hookline/web",
       "version": "0.0.0",
       "dependencies": {
-        "@next/env": "16.4.3",
+        "@hookline/db": "workspace:*",
+        "@hookline/shared": "workspace:*",
+        "drizzle-orm": "0.45.4",
         "geist": "1.8.2",
         "lucide-react": "1.64.0",
         "next": "16.4.3",
         "next-themes": "0.4.6",
         "react": "19.3.1",
         "react-dom": "19.3.1",
+        "server-only": "0.0.1",
+        "zod": "4.6.7",
       },
       "devDependencies": {
         "@tailwindcss/postcss": "4.3.3",
@@ -56,6 +60,14 @@
       "version": "0.0.0",
       "dependencies": {
         "@hookline/db": "workspace:*",
+      },
+    },
+    "packages/shared": {
+      "name": "@hookline/shared",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/bun": "1.4.4",
+        "typescript": "6.0.3",
       },
     },
     "services/edge": {
@@ -183,6 +195,8 @@
     "@hookline/edge": ["@hookline/edge@workspace:services/edge"],
 
     "@hookline/gocommon": ["@hookline/gocommon@workspace:packages/gocommon"],
+
+    "@hookline/shared": ["@hookline/shared@workspace:packages/shared"],
 
     "@hookline/web": ["@hookline/web@workspace:apps/web"],
 
@@ -485,6 +499,8 @@
     "scheduler": ["scheduler@0.28.0", "", {}, "sha512-juorfCmIkIw8tT+p5BXSm6PJjQF/ycEYmKyzURCIt/RaZIhL+PulbQ9Yu2z1HdOJDdqDTlxA1+xKBmHXJsczAw=="],
 
     "semver": ["semver@7.8.5", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA=="],
+
+    "server-only": ["server-only@0.0.1", "", {}, "sha512-qepMx2JxAa5jjfzxG79yPPq+8BuFToHd1hm7kI+Z4zAq1ftQiP7HcxMhDDItrbtwVeLg/cY2JnKnrcFkmiswNA=="],
 
     "set-cookie-parser": ["set-cookie-parser@3.2.1", "", {}, "sha512-Npd1Pt+4zb3BrSZDPd2qFwRpS6b1EUEasRrO8xS0zMJi0fApXXK5YuzP0minyJnxwnFHoVoJwA55q0A0cu63gQ=="],
 

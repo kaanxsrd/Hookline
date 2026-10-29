@@ -1,10 +1,9 @@
 import path from "node:path";
-import { loadEnvConfig } from "@next/env";
 import type { NextConfig } from "next";
 
-// One .env at the repository root configures every service in development.
-// Production images ship no .env file, so this is a no-op there.
-loadEnvConfig(path.resolve(process.cwd(), "../.."));
+// In development the root .env is loaded by the dev script itself
+// (scripts/with-env.ts): Next.js resets process.env before
+// rendering, so loading it here would not reach server code.
 
 const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
@@ -18,6 +17,8 @@ const config: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: path.resolve(process.cwd(), "../.."),
   poweredByHeader: false,
+  // Workspace packages ship TypeScript sources.
+  transpilePackages: ["@hookline/db", "@hookline/shared"],
   reactStrictMode: true,
   typedRoutes: true,
   async headers() {

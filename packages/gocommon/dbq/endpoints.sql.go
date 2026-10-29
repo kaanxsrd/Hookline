@@ -13,12 +13,53 @@ import (
 	"github.com/google/uuid"
 )
 
+const addEndpointRequests = `-- name: AddEndpointRequests :exec
+UPDATE endpoint
+SET request_count = request_count + $2::bigint,
+    last_request_at = GREATEST(last_request_at, $3::timestamptz)
+WHERE id = $1
+`
+
+type AddEndpointRequestsParams struct {
+	ID            uuid.UUID
+	N             int64
+	LastRequestAt time.Time
+}
+
+// Applied in batches by the edge's counter flusher, never per request.
+func (q *Queries) AddEndpointRequests(ctx context.Context, arg AddEndpointRequestsParams) error {
+	_, err := q.db.Exec(ctx, addEndpointRequests, arg.ID, arg.N, arg.LastRequestAt)
+	return err
+}
+
+const countEndpointRequestsSince = `-- name: CountEndpointRequestsSince :one
+SELECT count(*)::bigint
+FROM request
+WHERE endpoint_id = $1 AND received_at >= $2::timestamptz
+`
+
+type CountEndpointRequestsSinceParams struct {
+	EndpointID uuid.UUID
+	Since      time.Time
+}
+
+// Used for anonymous endpoints (at most 100 rows); the received_at bound
+// lets PostgreSQL skip partitions older than the endpoint.
+func (q *Queries) CountEndpointRequestsSince(ctx context.Context, arg CountEndpointRequestsSinceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countEndpointRequestsSince, arg.EndpointID, arg.Since)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getEndpointForIntake = `-- name: GetEndpointForIntake :one
-SELECT id, org_id, slug, status, response_mode, response_status, response_headers,
-       response_body, response_delay_ms, sync_timeout_ms, signature_provider,
-       signature_secret_enc, expires_at
-FROM endpoint
-WHERE slug = $1
+SELECT e.id, e.org_id, e.slug, e.status, e.response_mode, e.response_status,
+       e.response_headers, e.response_body, e.response_delay_ms, e.sync_timeout_ms,
+       e.signature_provider, e.signature_secret_enc, e.expires_at, e.created_at,
+       s.plan, s.plan_override
+FROM endpoint e
+LEFT JOIN subscription s ON s.org_id = e.org_id
+WHERE e.slug = $1
 `
 
 type GetEndpointForIntakeRow struct {
@@ -35,9 +76,13 @@ type GetEndpointForIntakeRow struct {
 	SignatureProvider  *SignatureProvider
 	SignatureSecretEnc *string
 	ExpiresAt          *time.Time
+	CreatedAt          time.Time
+	Plan               *Plan
+	PlanOverride       *Plan
 }
 
-// Everything intake needs to accept a request and answer the sender.
+// Everything intake needs to accept a request and answer the sender,
+// including the owner's plan (null for anonymous endpoints).
 func (q *Queries) GetEndpointForIntake(ctx context.Context, slug string) (GetEndpointForIntakeRow, error) {
 	row := q.db.QueryRow(ctx, getEndpointForIntake, slug)
 	var i GetEndpointForIntakeRow
@@ -55,6 +100,9 @@ func (q *Queries) GetEndpointForIntake(ctx context.Context, slug string) (GetEnd
 		&i.SignatureProvider,
 		&i.SignatureSecretEnc,
 		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.Plan,
+		&i.PlanOverride,
 	)
 	return i, err
 }

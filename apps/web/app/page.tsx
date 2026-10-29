@@ -1,4 +1,5 @@
-import { Activity, Inbox, Repeat, Send, ShieldCheck, Terminal } from "lucide-react";
+import { Activity, ArrowRight, Inbox, Repeat, Send, ShieldCheck, Terminal } from "lucide-react";
+import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const features = [
@@ -51,6 +52,14 @@ export default function HomePage() {
           Hookline gives you a URL that captures any HTTP request, shows it live, lets you inspect,
           replay and forward it, and streams it to your machine through a CLI tunnel.
         </p>
+        <Link
+          href="/new"
+          className="bg-primary text-primary-foreground mt-8 inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-90"
+        >
+          Get a webhook URL
+          <ArrowRight className="size-4" aria-hidden />
+        </Link>
+        <p className="text-muted-foreground mt-2 text-xs">No account needed. It lasts 24 hours.</p>
 
         <pre className="bg-card text-card-foreground mt-10 overflow-x-auto rounded-lg border p-4 font-mono text-sm">
           <code>

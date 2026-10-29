@@ -8,11 +8,27 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/sync/errgroup"
+
+	"github.com/kaanxsrd/hookline/packages/gocommon/blob"
+	"github.com/kaanxsrd/hookline/packages/gocommon/clientip"
 	gcfg "github.com/kaanxsrd/hookline/packages/gocommon/config"
+	"github.com/kaanxsrd/hookline/packages/gocommon/db"
+	"github.com/kaanxsrd/hookline/packages/gocommon/dbq"
+	"github.com/kaanxsrd/hookline/packages/gocommon/entitlements"
 	"github.com/kaanxsrd/hookline/packages/gocommon/httpx"
 	"github.com/kaanxsrd/hookline/packages/gocommon/logging"
+	"github.com/kaanxsrd/hookline/packages/gocommon/redisx"
 	"github.com/kaanxsrd/hookline/services/edge/internal/config"
+	"github.com/kaanxsrd/hookline/services/edge/internal/counters"
+	"github.com/kaanxsrd/hookline/services/edge/internal/endpoints"
+	"github.com/kaanxsrd/hookline/services/edge/internal/intake"
+	"github.com/kaanxsrd/hookline/services/edge/internal/live"
+	"github.com/kaanxsrd/hookline/services/edge/internal/metrics"
+	"github.com/kaanxsrd/hookline/services/edge/internal/ratelimit"
 	"github.com/kaanxsrd/hookline/services/edge/internal/server"
 )
 
@@ -36,6 +52,60 @@ func run() error {
 		return err
 	}
 
-	srv := httpx.NewServer(server.New(logger), logger)
-	return httpx.ListenAndServe(ctx, srv, cfg.Addr, logger, cfg.ShutdownTimeout)
+	pool, err := db.Open(ctx, cfg.DatabaseURL, db.Options{MaxConns: int32(cfg.DBMaxConns), ApplicationName: "hookline-edge"}) //nolint:gosec // bounded to 1..500 by config
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	queries := dbq.New(pool)
+
+	rdb, err := redisx.Open(cfg.RedisURL, "hookline-edge")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rdb.Close() }()
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		logger.WarnContext(ctx, "redis unreachable at startup; intake continues without cache, rate limits and live updates", "error", err)
+	}
+
+	var blobs blob.Store
+	checks := []server.Check{
+		{Name: "postgres", Critical: true, Probe: pool.Ping},
+		{Name: "redis", Probe: func(ctx context.Context) error { return rdb.Ping(ctx).Err() }},
+	}
+	if cfg.S3Enabled() {
+		s3 := blob.NewS3(cfg.S3)
+		blobs = s3
+		checks = append(checks, server.Check{Name: "s3", Probe: s3.Ping})
+	} else {
+		logger.WarnContext(ctx, "S3_BUCKET is not set; bodies over 64 KiB will be rejected")
+	}
+
+	m := metrics.New()
+	ctrs := counters.New(queries, logger, time.Second)
+	intakeRules := entitlements.Intake()
+	handler := intake.New(intake.Deps{
+		Queries:   queries,
+		Endpoints: endpoints.NewCache(queries, rdb, cfg.PlanOverride, logger),
+		Limiter:   ratelimit.New(rdb, ratelimit.Rule{Rate: intakeRules.PerIPRatePerSecond, Burst: intakeRules.PerIPBurst}),
+		Blobs:     blobs,
+		Publisher: live.NewPublisher(rdb),
+		Counters:  ctrs,
+		IPs:       clientip.New(cfg.TrustedProxies),
+		Metrics:   m,
+		Logger:    logger,
+	})
+
+	public := httpx.NewServer(server.New(logger, server.Routes{Intake: handler, Checks: checks}), logger)
+	internal := httpx.NewServer(promhttp.HandlerFor(m.Registry, promhttp.HandlerOpts{}), logger)
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return httpx.ListenAndServe(gctx, public, cfg.Addr, logger, cfg.ShutdownTimeout) })
+	g.Go(func() error { return httpx.ListenAndServe(gctx, internal, cfg.MetricsAddr, logger, 5*time.Second) })
+	g.Go(func() error {
+		// Runs until the servers have drained, then flushes the last counts.
+		ctrs.Run(gctx)
+		return nil
+	})
+	return g.Wait()
 }

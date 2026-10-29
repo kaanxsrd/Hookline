@@ -46,7 +46,8 @@ func (l *Loader) Err() error {
 	return errors.Join(l.errs...)
 }
 
-func (l *Loader) fail(key, format string, args ...any) {
+// Fail records a validation error for key, for checks the typed readers do not cover.
+func (l *Loader) Fail(key, format string, args ...any) {
 	l.errs = append(l.errs, fmt.Errorf("%s: %s", key, fmt.Sprintf(format, args...)))
 }
 
@@ -72,7 +73,7 @@ func (l *Loader) String(key, def string) string {
 func (l *Loader) RequiredString(key string) string {
 	v, ok := l.raw(key)
 	if !ok {
-		l.fail(key, "is required")
+		l.Fail(key, "is required")
 	}
 	return v
 }
@@ -85,11 +86,11 @@ func (l *Loader) Int(key string, def, lo, hi int) int {
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		l.fail(key, "must be an integer, got %q", v)
+		l.Fail(key, "must be an integer, got %q", v)
 		return def
 	}
 	if n < lo || n > hi {
-		l.fail(key, "must be between %d and %d, got %d", lo, hi, n)
+		l.Fail(key, "must be between %d and %d, got %d", lo, hi, n)
 		return def
 	}
 	return n
@@ -103,7 +104,7 @@ func (l *Loader) Bool(key string, def bool) bool {
 	}
 	b, err := strconv.ParseBool(v)
 	if err != nil {
-		l.fail(key, "must be a boolean, got %q", v)
+		l.Fail(key, "must be a boolean, got %q", v)
 		return def
 	}
 	return b
@@ -117,11 +118,11 @@ func (l *Loader) Duration(key string, def time.Duration) time.Duration {
 	}
 	d, err := time.ParseDuration(v)
 	if err != nil {
-		l.fail(key, "must be a duration such as 10s, got %q", v)
+		l.Fail(key, "must be a duration such as 10s, got %q", v)
 		return def
 	}
 	if d <= 0 {
-		l.fail(key, "must be positive, got %s", d)
+		l.Fail(key, "must be positive, got %s", d)
 		return def
 	}
 	return d
@@ -132,11 +133,11 @@ func (l *Loader) Addr(key, def string) string {
 	v := l.String(key, def)
 	_, port, err := net.SplitHostPort(v)
 	if err != nil {
-		l.fail(key, "must be host:port, got %q", v)
+		l.Fail(key, "must be host:port, got %q", v)
 		return def
 	}
 	if p, err := strconv.Atoi(port); err != nil || p < 0 || p > 65535 {
-		l.fail(key, "has an invalid port %q", port)
+		l.Fail(key, "has an invalid port %q", port)
 		return def
 	}
 	return v
@@ -146,7 +147,7 @@ func (l *Loader) Addr(key, def string) string {
 func (l *Loader) OneOf(key, def string, allowed ...string) string {
 	v := strings.ToLower(l.String(key, def))
 	if !slices.Contains(allowed, v) {
-		l.fail(key, "must be one of %s, got %q", strings.Join(allowed, ", "), v)
+		l.Fail(key, "must be one of %s, got %q", strings.Join(allowed, ", "), v)
 		return def
 	}
 	return v

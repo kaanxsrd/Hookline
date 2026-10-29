@@ -1,0 +1,2 @@
+ALTER TABLE "endpoint" DROP CONSTRAINT "endpoint_response_status_check";--> statement-breakpoint
+ALTER TABLE "endpoint" ADD CONSTRAINT "endpoint_response_status_check" CHECK ("endpoint"."response_status" BETWEEN 200 AND 599);
