@@ -1,13 +1,11 @@
 import { schema } from "@hookline/db";
 import { eq } from "drizzle-orm";
-import { authenticate, json } from "@/lib/api/http";
+import { json } from "@/lib/api/http";
+import { apiRoute } from "@/lib/api/route";
 import { orgPlan } from "@/lib/plans";
 
 /** The organization and key behind the presented API key (`hookline whoami`). */
-export async function GET(request: Request) {
-  const auth = await authenticate(request);
-  if ("response" in auth) return auth.response;
-  const { db, key, org } = auth.caller;
+export const GET = apiRoute(null, async ({ caller: { db, key, org } }) => {
   const [user] = key.createdBy
     ? await db
         .select({ email: schema.user.email, name: schema.user.name })
@@ -20,4 +18,4 @@ export async function GET(request: Request) {
     key: { id: key.id, name: key.name, prefix: key.prefix, scopes: key.scopes },
     user: user ?? null,
   });
-}
+});

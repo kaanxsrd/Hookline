@@ -14,39 +14,82 @@ export function json(data: unknown, status = 200, headers: HeadersInit = {}): Re
   });
 }
 
-/** Error body shared by every /api/v1 route: { error: { code, message } }. */
+/** The one error shape of /api/v1: { error: { code, message, details? } }. */
 export function apiError(
   status: number,
   code: string,
   message: string,
-  extra: Record<string, unknown> = {},
+  details?: Record<string, unknown>,
+  headers: HeadersInit = {},
 ): Response {
-  return json({ error: { code, message, ...extra } }, status);
+  return json({ error: { code, message, ...(details ? { details } : {}) } }, status, headers);
 }
 
-/** Parses a JSON body with schema, or returns a 400/415 response. */
+/** Thrown inside handlers to answer with an API error. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+    readonly details?: Record<string, unknown>,
+  ) {
+    super(message);
+  }
+}
+
+export const notFound = (what: string) =>
+  new ApiError(404, "not_found", `No such ${what} in this organization.`);
+
+/** Parses a JSON body with schema; throws ApiError (400/415) otherwise. */
 export async function readJson<T extends z.ZodType>(
   request: Request,
   schema: T,
-): Promise<{ data: z.infer<T> } | { response: Response }> {
+): Promise<z.infer<T>> {
   if (!request.headers.get("content-type")?.includes("application/json")) {
-    return { response: apiError(415, "unsupported_media_type", "Send a JSON body.") };
+    throw new ApiError(
+      415,
+      "unsupported_media_type",
+      "Send a JSON body with Content-Type: application/json.",
+    );
   }
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return { response: apiError(400, "invalid_json", "The body is not valid JSON.") };
+    throw new ApiError(400, "invalid_json", "The body is not valid JSON.");
   }
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
-    return {
-      response: apiError(400, "invalid_request", "The request body is invalid.", {
-        fields: z.flattenError(parsed.error).fieldErrors,
-      }),
-    };
+    throw new ApiError(400, "invalid_request", "The request body is invalid.", {
+      fields: z.flattenError(parsed.error).fieldErrors,
+    });
   }
-  return { data: parsed.data };
+  return parsed.data;
+}
+
+/** Parses query parameters with schema; throws ApiError (400) otherwise. */
+export function readQuery<T extends z.ZodType>(request: Request, schema: T): z.infer<T> {
+  const params = Object.fromEntries(new URL(request.url).searchParams);
+  const parsed = schema.safeParse(params);
+  if (!parsed.success) {
+    throw new ApiError(400, "invalid_request", "The query parameters are invalid.", {
+      fields: z.flattenError(parsed.error).fieldErrors,
+    });
+  }
+  return parsed.data;
+}
+
+/** ?cursor=&limit= for list endpoints. */
+export const pageQuery = z.object({
+  cursor: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+/** Splits rows fetched with limit + 1 into a page and its next cursor. */
+export function page<T extends { id: string }>(rows: T[], limit: number) {
+  const more = rows.length > limit;
+  const data = more ? rows.slice(0, limit) : rows;
+  return { data, next_cursor: more ? (data.at(-1)?.id ?? null) : null };
 }
 
 export type ApiCaller = {
@@ -57,22 +100,18 @@ export type ApiCaller = {
 
 /**
  * Authenticates "Authorization: Bearer hk_live_..." and checks a scope.
- * Returns the caller or an error response (401 or 403).
+ * Throws ApiError 401 or 403.
  */
-export async function authenticate(
-  request: Request,
-  scope?: ApiScope,
-): Promise<{ caller: ApiCaller } | { response: Response }> {
+export async function authenticate(request: Request, scope?: ApiScope): Promise<ApiCaller> {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  const unauthorized = apiError(
+  const unauthorized = new ApiError(
     401,
     "unauthorized",
     "Send a valid API key as `Authorization: Bearer hk_live_...`.",
   );
-  if (!token.startsWith(API_KEY_PREFIX) || token.length > API_KEY_PREFIX.length + 64) {
-    return { response: unauthorized };
-  }
+  if (!token.startsWith(API_KEY_PREFIX) || token.length > API_KEY_PREFIX.length + 64)
+    throw unauthorized;
   const db = getDb();
   const k = schema.apiKey;
   const [row] = await db
@@ -96,13 +135,11 @@ export async function authenticate(
         or(isNull(k.expiresAt), gt(k.expiresAt, new Date())),
       ),
     );
-  if (!row) return { response: unauthorized };
+  if (!row) throw unauthorized;
   if (scope && !row.scopes.includes(scope)) {
-    return {
-      response: apiError(403, "insufficient_scope", `This API key lacks the ${scope} scope.`, {
-        required_scope: scope,
-      }),
-    };
+    throw new ApiError(403, "insufficient_scope", `This API key lacks the ${scope} scope.`, {
+      required_scope: scope,
+    });
   }
   if (!row.lastUsedAt || Date.now() - row.lastUsedAt.getTime() > 60_000) {
     // Informational and best effort, at most once a minute.
@@ -113,16 +150,14 @@ export async function authenticate(
       .catch(() => {});
   }
   return {
-    caller: {
-      db,
-      key: {
-        id: row.id,
-        name: row.name,
-        prefix: row.prefix,
-        scopes: row.scopes,
-        createdBy: row.createdBy,
-      },
-      org: { id: row.orgId, slug: row.orgSlug, name: row.orgName },
+    db,
+    key: {
+      id: row.id,
+      name: row.name,
+      prefix: row.prefix,
+      scopes: row.scopes,
+      createdBy: row.createdBy,
     },
+    org: { id: row.orgId, slug: row.orgSlug, name: row.orgName },
   };
 }

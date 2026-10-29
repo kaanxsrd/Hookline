@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { apiError, json, readJson } from "@/lib/api/http";
+import { ApiError, json, readJson } from "@/lib/api/http";
+import { publicRoute } from "@/lib/api/route";
 import { clientIp } from "@/lib/client-ip";
 import { getDb } from "@/lib/db";
 import { POLL_INTERVAL_SECONDS, requestDeviceCode } from "@/lib/device-codes";
@@ -16,15 +17,14 @@ const body = z.object({
 });
 
 /** Starts `hookline login`: returns a device code to poll with and a code for the user. */
-export async function POST(request: Request) {
-  const parsed = await readJson(request, body);
-  if ("response" in parsed) return parsed.response;
+export const POST = publicRoute(async ({ request }) => {
+  const input = await readJson(request, body);
   const result = await requestDeviceCode(getDb(), {
-    clientName: parsed.data.client_name || null,
+    clientName: input.client_name || null,
     ip: clientIp(request.headers),
   });
   if (!result.ok) {
-    return apiError(
+    throw new ApiError(
       429,
       "rate_limited",
       "Too many login attempts from this address. Try again later.",
@@ -44,4 +44,4 @@ export async function POST(request: Request) {
     },
     201,
   );
-}
+});

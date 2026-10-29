@@ -93,14 +93,14 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 		}
 		writeJSON(w, 200, map[string]any{
 			"api_key": key, "key_prefix": "hk_live_CliT",
-			"org":  map[string]string{"id": "o1", "slug": "acme", "name": "Acme"},
+			"org":  map[string]string{"id": "0192f3a4-0000-7000-8000-0000000000a1", "slug": "acme", "name": "Acme"},
 			"user": map[string]string{"email": "dev@acme.test", "name": "Dev"},
 		})
 	})
 	mux.HandleFunc("GET /api/v1/me", authed(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{
-			"org":  map[string]string{"id": "o1", "slug": "acme", "name": "Acme", "plan": "pro"},
-			"key":  map[string]any{"id": "k1", "name": "CLI on laptop", "prefix": "hk_live_CliT", "scopes": []string{"tunnel"}},
+			"org":  map[string]string{"id": "0192f3a4-0000-7000-8000-0000000000a1", "slug": "acme", "name": "Acme", "plan": "pro"},
+			"key":  map[string]any{"id": "0192f3a4-0000-7000-8000-0000000000b1", "name": "CLI on laptop", "prefix": "hk_live_CliT", "scopes": []string{"tunnel"}},
 			"user": map[string]string{"email": "dev@acme.test", "name": "Dev"},
 		})
 	}))
@@ -109,17 +109,17 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 		writeJSON(w, 200, map[string]bool{"revoked": true})
 	}))
 	endpoint := map[string]any{
-		"id": "e1", "slug": "abc123def456", "url": "", "name": "Stripe",
+		"id": "0192f3a4-0000-7000-8000-0000000000e1", "slug": "abc123def456", "url": "", "name": "Stripe",
 		"status": "active", "request_count": 7, "created_at": "2026-01-01T00:00:00Z",
 	}
 	mux.HandleFunc("GET /api/v1/endpoints", authed(func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, map[string]any{"data": []any{endpoint}})
+		writeJSON(w, 200, map[string]any{"data": []any{endpoint}, "next_cursor": nil})
 	}))
 	mux.HandleFunc("POST /api/v1/endpoints", authed(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]string
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		f.created.Store(body["name"])
-		writeJSON(w, 201, map[string]any{"id": "e2", "slug": "newSlug00001", "url": "https://hooks.test/h/newSlug00001", "name": body["name"], "status": "active"})
+		writeJSON(w, 201, map[string]any{"id": "0192f3a4-0000-7000-8000-0000000000e2", "slug": "newSlug00001", "url": "https://hooks.test/h/newSlug00001", "name": body["name"], "status": "active"})
 	}))
 	mux.HandleFunc("GET /api/v1/endpoints/{ref}", authed(func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("ref") != "abc123def456" {
@@ -138,7 +138,7 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 		}
 		body := base64.StdEncoding.EncodeToString([]byte(`{"type":"invoice.paid"}`))
 		writeJSON(w, 200, map[string]any{
-			"id": requestID, "endpoint": map[string]string{"id": "e1", "slug": "abc123def456"},
+			"id": requestID, "endpoint": map[string]string{"id": "0192f3a4-0000-7000-8000-0000000000e1", "slug": "abc123def456"},
 			"method": "POST", "path": "/stripe", "query": [][2]string{{"a", "1"}},
 			"headers":  [][2]string{{"Content-Type", "application/json"}, {"Stripe-Signature", "t=1,v1=x"}},
 			"body_b64": body, "body_size": 23, "received_at": "2026-10-29T12:00:00Z",
@@ -154,7 +154,7 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 			writeJSON(w, 202, map[string]any{"target": "cli", "receivers": 1})
 			return
 		}
-		writeJSON(w, 202, map[string]any{"target": "destination", "delivery_id": "d1"})
+		writeJSON(w, 202, map[string]any{"target": "destination", "delivery_id": "0192f3a4-0000-7000-8000-0000000000d1"})
 	}))
 	mux.HandleFunc("GET /api/v1/endpoints/{ref}/signature-secret", authed(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]string{"provider": "stripe", "secret": "whsec_from_api"})
@@ -364,13 +364,13 @@ func TestReplayNeedsOneTarget(t *testing.T) {
 	_, stderr, code := runCLI(t, "", "replay", requestID)
 	assert.Equal(t, 1, code)
 	assert.Contains(t, stderr, "choose one target")
-	_, stderr, code = runCLI(t, "", "replay", requestID, "--cli", "--destination", "d1")
+	_, stderr, code = runCLI(t, "", "replay", requestID, "--cli", "--destination", "0192f3a4-0000-7000-8000-0000000000d1")
 	assert.Equal(t, 1, code)
 	assert.Contains(t, stderr, "choose one target")
 
 	_, stderr, code = runCLI(t, "", "replay", requestID, "--destination", "0192f3a4-0000-7000-8000-00000000000d")
 	require.Equal(t, 0, code, stderr)
-	assert.Contains(t, stderr, "Queued delivery d1")
+	assert.Contains(t, stderr, "Queued delivery 0192f3a4-0000-7000-8000-0000000000d1")
 }
 
 func TestTriggerSignsWithTheEndpointSecret(t *testing.T) {
@@ -395,4 +395,34 @@ func TestTriggerSignsWithTheEndpointSecret(t *testing.T) {
 	_, stderr, code = runCLI(t, "", "trigger", "abc123def456", "nope.event")
 	assert.Equal(t, 1, code)
 	assert.Contains(t, stderr, "trigger --list")
+}
+
+func TestUpdateChecksGitHubReleases(t *testing.T) {
+	setup(t)
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/releases/latest", r.URL.Path)
+		_, _ = io.WriteString(w, `{"tag_name":"cli-v9.8.7","html_url":"https://github.com/example/hookline/releases/tag/cli-v9.8.7"}`)
+	}))
+	defer gh.Close()
+	t.Setenv("HOOKLINE_RELEASES_API", gh.URL)
+
+	out, stderr, code := runCLI(t, "", "update")
+	require.Equal(t, 0, code, stderr)
+	assert.Contains(t, out, "development build")
+	assert.Contains(t, out, "9.8.7")
+	assert.Contains(t, out, "releases/tag/cli-v9.8.7")
+
+	out, _, code = runCLI(t, "", "update", "--json")
+	require.Equal(t, 0, code)
+	var v map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &v))
+	assert.Equal(t, "9.8.7", v["latest"])
+	assert.Equal(t, true, v["update_available"])
+}
+
+func TestCompletion(t *testing.T) {
+	setup(t)
+	out, _, code := runCLI(t, "", "completion", "bash")
+	require.Equal(t, 0, code)
+	assert.Contains(t, out, "hookline")
 }

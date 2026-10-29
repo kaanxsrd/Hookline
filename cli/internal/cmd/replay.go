@@ -38,9 +38,9 @@ const editHeader = "# Edit the request, then save and close the editor to send i
 	"# Delete everything to cancel. Headers are [name, value] pairs.\n"
 
 func toEditable(r api.Request) (editable, error) {
-	e := editable{Method: r.Method, Path: r.Path, Headers: r.Headers}
+	e := editable{Method: r.Method, Path: r.Path, Headers: api.FromPairs(r.Headers)}
 	parts := make([]string, 0, len(r.Query))
-	for _, q := range r.Query {
+	for _, q := range api.FromPairs(r.Query) {
 		parts = append(parts, url.QueryEscape(q[0])+"="+url.QueryEscape(q[1]))
 	}
 	e.Query = strings.Join(parts, "&")
@@ -181,8 +181,7 @@ func newReplayCmd(opts *globalOptions) *cobra.Command {
 			}
 			var override *api.Override
 			if edited != nil {
-				b64 := base64.StdEncoding.EncodeToString(edited.body())
-				override = &api.Override{Method: edited.Method, Path: edited.Path, Query: edited.Query, Headers: edited.Headers, BodyB64: &b64}
+				override = &api.Override{Method: edited.Method, Path: edited.Path, Query: edited.Query, Headers: edited.Headers, Body: edited.body()}
 			}
 			res, err := s.client.Replay(ctx, args[0], destination, override)
 			if err != nil {
@@ -195,7 +194,11 @@ func newReplayCmd(opts *globalOptions) *cobra.Command {
 			if res.Target == "cli" {
 				p.Success("Sent to the CLIs listening on the endpoint")
 			} else {
-				p.Success("Queued delivery %s", res.DeliveryID)
+				id := ""
+				if res.DeliveryId != nil {
+					id = res.DeliveryId.String()
+				}
+				p.Success("Queued delivery %s", id)
 			}
 			return nil
 		},
@@ -215,9 +218,9 @@ func replayLocally(ctx context.Context, opts *globalOptions, r api.Request, edit
 		return errors.New(strings.Replace(err.Error(), "--forward", "--to", 1))
 	}
 	// Like `listen`, the captured path below /h/{slug} is appended to the target.
-	req := protocol.Request{ID: r.ID, Method: r.Method, Path: r.Path, Headers: r.Headers, ReceivedAt: r.ReceivedAt}
+	req := protocol.Request{ID: r.Id.String(), Method: r.Method, Path: r.Path, Headers: api.FromPairs(r.Headers), ReceivedAt: r.ReceivedAt}
 	parts := make([]string, 0, len(r.Query))
-	for _, q := range r.Query {
+	for _, q := range api.FromPairs(r.Query) {
 		parts = append(parts, url.QueryEscape(q[0])+"="+url.QueryEscape(q[1]))
 	}
 	req.Query = strings.Join(parts, "&")
@@ -236,6 +239,6 @@ func replayLocally(ctx context.Context, opts *globalOptions, r api.Request, edit
 	if perr != nil {
 		return errors.New(perr.Message)
 	}
-	p.Forwarded(r.Endpoint.Slug, protocol.Request{Method: req.Method, Path: req.Path, Query: req.Query, ReceivedAt: time.Now(), ReplayOf: r.ID, Headers: req.Headers, BodyB64: req.BodyB64}, resp, nil, time.Since(start))
+	p.Forwarded(r.Endpoint.Slug, protocol.Request{Method: req.Method, Path: req.Path, Query: req.Query, ReceivedAt: time.Now(), ReplayOf: r.Id.String(), Headers: req.Headers, BodyB64: req.BodyB64}, resp, nil, time.Since(start))
 	return nil
 }

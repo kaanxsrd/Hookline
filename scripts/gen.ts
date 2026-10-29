@@ -2,6 +2,8 @@
  * bun run gen — regenerates every derived source file:
  *   - entitlements for Go and TypeScript (from config/plans.json)
  *   - Go query layer (sqlc, from packages/db/migrations + packages/gocommon/dbq/queries)
+ *   - API types for TypeScript (openapi-typescript) and Go (oapi-codegen), and the
+ *     OpenAPI document as a module, all from api/openapi.yaml
  *
  * sqlc runs from its official Docker image because its PostgreSQL parser needs
  * cgo, which is not available everywhere (notably Windows). CI runs this and
@@ -9,6 +11,7 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { parse } from "yaml";
 import { renderGo, renderTs, validatePlans } from "./lib/plans";
 
 const root = resolve(import.meta.dir, "..");
@@ -56,9 +59,38 @@ async function sqlc(): Promise<void> {
   ]);
 }
 
+async function openapi(): Promise<void> {
+  const spec = "api/openapi.yaml";
+  const typesFile = "packages/shared/src/api.gen.ts";
+  const docFile = "packages/shared/src/openapi.gen.ts";
+  await run(["bunx", "openapi-typescript", spec, "--output", typesFile]);
+  const doc: unknown = parse(readFileSync(join(root, spec), "utf8"));
+  writeFileSync(
+    join(root, docFile),
+    `// Code generated from ${spec} by \`bun run gen\`. DO NOT EDIT.
+
+` +
+      `/** The OpenAPI document, served at /api/v1/openapi.json and rendered at /docs/api. */
+` +
+      `export const openapiDocument: Record<string, unknown> = ${JSON.stringify(doc)};
+`,
+  );
+  await run(["bunx", "biome", "format", "--write", typesFile, docFile]);
+  await run([
+    "bun",
+    "scripts/go.ts",
+    "tool",
+    "oapi-codegen",
+    "-config",
+    "cli/internal/api/oapi-codegen.yaml",
+    spec,
+  ]);
+}
+
 try {
   await entitlements();
   await sqlc();
+  await openapi();
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);

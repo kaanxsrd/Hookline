@@ -1,0 +1,1085 @@
+// Code generated from api/openapi.yaml by `bun run gen`. DO NOT EDIT.
+
+/** The OpenAPI document, served at /api/v1/openapi.json and rendered at /docs/api. */
+export const openapiDocument: Record<string, unknown> = {
+  openapi: "3.0.3",
+  info: {
+    title: "Hookline API",
+    version: "1.0.0",
+    description:
+      'The Hookline REST API. Authenticate with an API key (`Authorization: Bearer hk_live_...`)\ncreated under **Settings → API keys** or by `hookline login`. Each key belongs to one\norganization and carries scopes.\n\n- **Errors** share one shape: `{"error": {"code", "message", "details"?}}`.\n- **Idempotency:** every authenticated `POST` accepts an `Idempotency-Key` header (1–255\n  characters). Repeating a request with the same key within 24 hours returns the first\n  response (with `Idempotent-Replayed: true`) instead of acting twice; reusing a key for a\n  different request is rejected with `422`.\n- **Rate limits** apply per key; every response carries `RateLimit-Limit`,\n  `RateLimit-Remaining` and `RateLimit-Reset`. Over the limit you get `429` with `Retry-After`.\n- **Pagination:** list endpoints take `cursor` and `limit` and return `next_cursor` (null on\n  the last page).\n',
+    license: { name: "MIT", url: "https://opensource.org/licenses/MIT" },
+  },
+  servers: [{ url: "/api/v1", description: "This Hookline instance" }],
+  security: [{ apiKey: [] }],
+  tags: [
+    { name: "Endpoints" },
+    { name: "Requests" },
+    { name: "Destinations" },
+    { name: "Deliveries" },
+    { name: "Account" },
+    { name: "CLI" },
+  ],
+  paths: {
+    "/endpoints": {
+      get: {
+        tags: ["Endpoints"],
+        operationId: "listEndpoints",
+        summary: "List endpoints",
+        description: "Newest first. Scope `endpoints:read`.",
+        parameters: [
+          { $ref: "#/components/parameters/Cursor" },
+          { $ref: "#/components/parameters/Limit" },
+        ],
+        responses: {
+          "200": {
+            description: "A page of endpoints.",
+            headers: {
+              "RateLimit-Limit": { $ref: "#/components/headers/RateLimitLimit" },
+              "RateLimit-Remaining": { $ref: "#/components/headers/RateLimitRemaining" },
+              "RateLimit-Reset": { $ref: "#/components/headers/RateLimitReset" },
+            },
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/EndpointPage" } },
+            },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+      post: {
+        tags: ["Endpoints"],
+        operationId: "createEndpoint",
+        summary: "Create an endpoint",
+        description: "Scope `endpoints:write`. Subject to the plan's endpoint limit.",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": { schema: { $ref: "#/components/schemas/EndpointCreate" } },
+          },
+        },
+        responses: {
+          "201": {
+            description: "The new endpoint.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Endpoint" } } },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/endpoints/{id}": {
+      parameters: [{ $ref: "#/components/parameters/EndpointRef" }],
+      get: {
+        tags: ["Endpoints"],
+        operationId: "getEndpoint",
+        summary: "Get an endpoint",
+        description: "Scope `endpoints:read`.",
+        responses: {
+          "200": {
+            description: "The endpoint.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Endpoint" } } },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+      patch: {
+        tags: ["Endpoints"],
+        operationId: "updateEndpoint",
+        summary: "Update an endpoint",
+        description: "Scope `endpoints:write`. Only the fields sent change.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": { schema: { $ref: "#/components/schemas/EndpointUpdate" } },
+          },
+        },
+        responses: {
+          "200": {
+            description: "The updated endpoint.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Endpoint" } } },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+      delete: {
+        tags: ["Endpoints"],
+        operationId: "deleteEndpoint",
+        summary: "Delete an endpoint",
+        description:
+          "Scope `endpoints:write`. Deletes its requests, destinations and deliveries too.",
+        responses: {
+          "204": { description: "Deleted." },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/endpoints/{id}/requests": {
+      parameters: [{ $ref: "#/components/parameters/EndpointRef" }],
+      get: {
+        tags: ["Requests"],
+        operationId: "listRequests",
+        summary: "List an endpoint's requests",
+        description: "Newest first. Scope `requests:read`.",
+        parameters: [
+          { $ref: "#/components/parameters/Cursor" },
+          { $ref: "#/components/parameters/Limit" },
+          {
+            name: "method",
+            in: "query",
+            description: "Only these methods (comma-separated).",
+            schema: { type: "string", example: "POST,PUT" },
+          },
+          {
+            name: "signature",
+            in: "query",
+            description: "Only these signature statuses (comma-separated).",
+            schema: { type: "string", example: "verified" },
+          },
+          { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
+          { name: "to", in: "query", schema: { type: "string", format: "date-time" } },
+          {
+            name: "q",
+            in: "query",
+            description: "Full-text search over the path and bodies up to 64 KiB.",
+            schema: { type: "string", maxLength: 200 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "A page of request summaries.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/RequestPage" } },
+            },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/endpoints/{id}/destinations": {
+      parameters: [{ $ref: "#/components/parameters/EndpointRef" }],
+      get: {
+        tags: ["Destinations"],
+        operationId: "listDestinations",
+        summary: "List an endpoint's destinations",
+        description: "Scope `endpoints:read`.",
+        responses: {
+          "200": {
+            description: "The destinations, oldest first.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["data"],
+                  properties: {
+                    data: { type: "array", items: { $ref: "#/components/schemas/Destination" } },
+                  },
+                },
+              },
+            },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+      post: {
+        tags: ["Destinations"],
+        operationId: "createDestination",
+        summary: "Add a destination",
+        description:
+          "Scope `destinations:write`. Subject to the plan's destinations-per-endpoint limit.\nWhen `sign_with_standard_webhooks` is true the response includes the new\n`signing_secret`, once.\n",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": { schema: { $ref: "#/components/schemas/DestinationCreate" } },
+          },
+        },
+        responses: {
+          "201": {
+            description: "The new destination.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/DestinationCreated" } },
+            },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/endpoints/{id}/signature-secret": {
+      parameters: [{ $ref: "#/components/parameters/EndpointRef" }],
+      get: {
+        tags: ["Endpoints"],
+        operationId: "getSignatureSecret",
+        summary: "Read the signature secret",
+        description:
+          "The endpoint's signature provider and secret, used by `hookline trigger` to sign sample\nevents. Scope `endpoints:write`. Every read is written to the audit log.\n",
+        responses: {
+          "200": {
+            description: "The provider and secret.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["provider", "secret"],
+                  properties: {
+                    provider: { $ref: "#/components/schemas/SignatureProvider" },
+                    secret: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/requests/{id}": {
+      parameters: [{ $ref: "#/components/parameters/RequestId" }],
+      get: {
+        tags: ["Requests"],
+        operationId: "getRequest",
+        summary: "Get a request",
+        description:
+          "Headers are returned unmasked and the body base64-encoded (bodies over 10 MiB are left\nout: fetch them from `/requests/{id}/body`). Scope `requests:read`.\n",
+        responses: {
+          "200": {
+            description: "The request.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Request" } } },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+      delete: {
+        tags: ["Requests"],
+        operationId: "deleteRequest",
+        summary: "Delete a request",
+        description: "Scope `endpoints:write`.",
+        responses: {
+          "204": { description: "Deleted." },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/requests/{id}/body": {
+      parameters: [{ $ref: "#/components/parameters/RequestId" }],
+      get: {
+        tags: ["Requests"],
+        operationId: "getRequestBody",
+        summary: "Download a request body",
+        description: "The raw body as an attachment, whatever its size. Scope `requests:read`.",
+        responses: {
+          "200": {
+            description: "The body.",
+            content: {
+              "application/octet-stream": { schema: { type: "string", format: "binary" } },
+            },
+          },
+          "204": { description: "The request has no body." },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/requests/{id}/replay": {
+      parameters: [{ $ref: "#/components/parameters/RequestId" }],
+      post: {
+        tags: ["Requests"],
+        operationId: "replayRequest",
+        summary: "Replay a request",
+        description:
+          "Sends a captured request again, to one of its endpoint's destinations or to the CLIs\nlistening on the endpoint, optionally edited. Header values sent as `••••••••` are\nreplaced by the captured ones. Scope `requests:replay`.\n",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/ReplayInput" } } },
+        },
+        responses: {
+          "202": {
+            description: "Replay started.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/ReplayResult" } },
+            },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/destinations/{id}": {
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+      ],
+      patch: {
+        tags: ["Destinations"],
+        operationId: "updateDestination",
+        summary: "Update a destination",
+        description: "Scope `destinations:write`. Only the fields sent change.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": { schema: { $ref: "#/components/schemas/DestinationUpdate" } },
+          },
+        },
+        responses: {
+          "200": {
+            description: "The updated destination.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Destination" } },
+            },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+      delete: {
+        tags: ["Destinations"],
+        operationId: "deleteDestination",
+        summary: "Delete a destination",
+        description: "Scope `destinations:write`. Its deliveries are deleted too.",
+        responses: {
+          "204": { description: "Deleted." },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/deliveries": {
+      get: {
+        tags: ["Deliveries"],
+        operationId: "listDeliveries",
+        summary: "List deliveries",
+        description: "Newest first, across the organization. Scope `requests:read`.",
+        parameters: [
+          { $ref: "#/components/parameters/Cursor" },
+          { $ref: "#/components/parameters/Limit" },
+          {
+            name: "status",
+            in: "query",
+            description: "Only these statuses (comma-separated).",
+            schema: { type: "string", example: "failed" },
+          },
+          {
+            name: "endpoint",
+            in: "query",
+            description: "Only this endpoint (ID or slug).",
+            schema: { type: "string" },
+          },
+          { name: "destination", in: "query", schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "200": {
+            description: "A page of deliveries.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/DeliveryPage" } },
+            },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/deliveries/{id}/retry": {
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+      ],
+      post: {
+        tags: ["Deliveries"],
+        operationId: "retryDelivery",
+        summary: "Retry a delivery",
+        description:
+          "Sends the request to the destination again as a new delivery. Scope `requests:replay`.",
+        parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+        responses: {
+          "202": {
+            description: "The new delivery.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["delivery_id"],
+                  properties: { delivery_id: { type: "string", format: "uuid" } },
+                },
+              },
+            },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/usage": {
+      get: {
+        tags: ["Account"],
+        operationId: "getUsage",
+        summary: "Usage this month",
+        description: "The current calendar month (UTC) against the plan's limits. Any scope.",
+        responses: {
+          "200": {
+            description: "Usage and limits.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Usage" } } },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/me": {
+      get: {
+        tags: ["Account"],
+        operationId: "getMe",
+        summary: "The calling key",
+        description: "The organization and key behind the request. Any scope.",
+        responses: {
+          "200": {
+            description: "Organization, key and its creator.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Me" } } },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/cli/config": {
+      get: {
+        tags: ["CLI"],
+        operationId: "getCliConfig",
+        summary: "Tunnel configuration",
+        security: [],
+        responses: {
+          "200": {
+            description: "Where tunnels connect.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/CliConfig" } } },
+          },
+        },
+      },
+    },
+    "/cli/device-codes": {
+      post: {
+        tags: ["CLI"],
+        operationId: "createDeviceCode",
+        summary: "Start a device login",
+        description: "Rate-limited per address. Used by `hookline login`.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  client_name: {
+                    type: "string",
+                    maxLength: 64,
+                    description: "Shown on the approval page, e.g. the machine's hostname.",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "A device code to poll with and a code for the user.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/DeviceCode" } },
+            },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/cli/device-codes/poll": {
+      post: {
+        tags: ["CLI"],
+        operationId: "pollDeviceCode",
+        summary: "Poll a device login",
+        description:
+          "Until approved this answers `400` with code `authorization_pending`, `slow_down`\n(polling faster than `interval`), `access_denied`, `expired_token` or `invalid_grant`.\nOnce approved it returns a new API key, once.\n",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["device_code"],
+                properties: { device_code: { type: "string" } },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "The new API key.",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/DeviceLogin" } },
+            },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/cli/logout": {
+      post: {
+        tags: ["CLI"],
+        operationId: "logout",
+        summary: "Revoke the calling key",
+        responses: {
+          "200": {
+            description: "Revoked.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["revoked"],
+                  properties: { revoked: { type: "boolean", enum: [true] } },
+                },
+              },
+            },
+          },
+          default: { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/openapi.json": {
+      get: {
+        tags: ["Account"],
+        operationId: "getOpenApi",
+        summary: "This document",
+        security: [],
+        responses: {
+          "200": {
+            description: "The OpenAPI document as JSON.",
+            content: { "application/json": { schema: { type: "object" } } },
+          },
+        },
+      },
+    },
+  },
+  components: {
+    securitySchemes: {
+      apiKey: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "hk_live_...",
+        description: "An API key from Settings → API keys or `hookline login`.",
+      },
+    },
+    parameters: {
+      Cursor: {
+        name: "cursor",
+        in: "query",
+        description: "The `next_cursor` of the previous page.",
+        schema: { type: "string" },
+      },
+      Limit: {
+        name: "limit",
+        in: "query",
+        schema: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+      },
+      EndpointRef: {
+        name: "id",
+        in: "path",
+        required: true,
+        description: "The endpoint's ID or slug.",
+        schema: { type: "string" },
+      },
+      RequestId: {
+        name: "id",
+        in: "path",
+        required: true,
+        schema: { type: "string", format: "uuid" },
+      },
+      IdempotencyKey: {
+        name: "Idempotency-Key",
+        in: "header",
+        description: "Makes retries of this POST safe for 24 hours.",
+        schema: { type: "string", minLength: 1, maxLength: 255 },
+      },
+    },
+    headers: {
+      RateLimitLimit: {
+        description: "Requests allowed per window (sent on every response).",
+        schema: { type: "integer" },
+      },
+      RateLimitRemaining: {
+        description: "Requests left in the current window.",
+        schema: { type: "integer" },
+      },
+      RateLimitReset: {
+        description: "Seconds until the window resets.",
+        schema: { type: "integer" },
+      },
+    },
+    responses: {
+      Error: {
+        description: "An error.",
+        content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+      },
+    },
+    schemas: {
+      Error: {
+        type: "object",
+        required: ["error"],
+        properties: {
+          error: {
+            type: "object",
+            required: ["code", "message"],
+            properties: {
+              code: {
+                type: "string",
+                description:
+                  "Machine-readable, e.g. `not_found`, `insufficient_scope`, `rate_limited`.",
+              },
+              message: { type: "string", description: "For humans." },
+              details: { type: "object", additionalProperties: true },
+            },
+          },
+        },
+      },
+      Pair: {
+        type: "array",
+        items: { type: "string" },
+        minItems: 2,
+        maxItems: 2,
+        description: "A `[name, value]` pair; order and repeats are kept.",
+      },
+      SignatureProvider: {
+        type: "string",
+        enum: [
+          "stripe",
+          "github",
+          "shopify",
+          "slack",
+          "standard_webhooks",
+          "discord",
+          "hmac_sha256",
+        ],
+      },
+      Endpoint: {
+        type: "object",
+        required: [
+          "id",
+          "slug",
+          "url",
+          "name",
+          "description",
+          "status",
+          "response_mode",
+          "request_count",
+          "last_request_at",
+          "retention_hours",
+          "signature_provider",
+          "created_at",
+        ],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          slug: { type: "string", pattern: "^[0-9A-Za-z]{12}$" },
+          url: { type: "string", format: "uri", description: "Where senders post." },
+          name: { type: "string" },
+          description: { type: "string" },
+          status: { type: "string", enum: ["active", "paused", "disabled_by_admin"] },
+          response_mode: { type: "string", enum: ["static", "cli_sync"] },
+          request_count: { type: "integer" },
+          last_request_at: { type: "string", nullable: true, format: "date-time" },
+          retention_hours: { type: "integer" },
+          signature_provider: {
+            allOf: [{ $ref: "#/components/schemas/SignatureProvider" }],
+            nullable: true,
+          },
+          created_at: { type: "string", format: "date-time" },
+        },
+      },
+      EndpointCreate: {
+        type: "object",
+        required: ["name"],
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 80 },
+          description: { type: "string", maxLength: 500 },
+          template: {
+            type: "string",
+            enum: ["generic", "stripe", "github", "shopify", "discord"],
+            description: "Pre-fills the response the provider expects and its signature provider.",
+          },
+        },
+      },
+      EndpointUpdate: {
+        type: "object",
+        minProperties: 1,
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 80 },
+          description: { type: "string", maxLength: 500 },
+          status: { type: "string", enum: ["active", "paused"] },
+          retention_hours: { type: "integer", minimum: 1, description: "Capped by the plan." },
+        },
+      },
+      EndpointPage: {
+        type: "object",
+        required: ["data", "next_cursor"],
+        properties: {
+          data: { type: "array", items: { $ref: "#/components/schemas/Endpoint" } },
+          next_cursor: { type: "string", nullable: true },
+        },
+      },
+      RequestSummary: {
+        type: "object",
+        required: [
+          "id",
+          "endpoint_id",
+          "method",
+          "path",
+          "content_type",
+          "body_size",
+          "source_ip",
+          "signature_status",
+          "response_status",
+          "received_at",
+          "deliveries",
+        ],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          endpoint_id: { type: "string", format: "uuid" },
+          method: { type: "string" },
+          path: { type: "string" },
+          content_type: { type: "string", nullable: true },
+          body_size: { type: "integer" },
+          source_ip: { type: "string", nullable: true },
+          signature_status: { type: "string", enum: ["verified", "invalid", "unchecked"] },
+          response_status: { type: "integer", nullable: true },
+          received_at: { type: "string", format: "date-time" },
+          deliveries: {
+            type: "array",
+            description: "Statuses of the request's deliveries, oldest first.",
+            items: { $ref: "#/components/schemas/DeliveryStatus" },
+          },
+        },
+      },
+      RequestPage: {
+        type: "object",
+        required: ["data", "next_cursor"],
+        properties: {
+          data: { type: "array", items: { $ref: "#/components/schemas/RequestSummary" } },
+          next_cursor: { type: "string", nullable: true },
+        },
+      },
+      Request: {
+        type: "object",
+        required: [
+          "id",
+          "endpoint",
+          "method",
+          "path",
+          "query",
+          "headers",
+          "content_type",
+          "body_size",
+          "body_b64",
+          "body_omitted",
+          "signature_status",
+          "received_at",
+        ],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          endpoint: {
+            type: "object",
+            required: ["id", "slug"],
+            properties: { id: { type: "string", format: "uuid" }, slug: { type: "string" } },
+          },
+          method: { type: "string" },
+          path: { type: "string" },
+          query: { type: "array", items: { $ref: "#/components/schemas/Pair" } },
+          headers: { type: "array", items: { $ref: "#/components/schemas/Pair" } },
+          content_type: { type: "string", nullable: true },
+          body_size: { type: "integer" },
+          body_b64: { type: "string", nullable: true },
+          body_omitted: { type: "boolean" },
+          signature_status: { type: "string", enum: ["verified", "invalid", "unchecked"] },
+          received_at: { type: "string", format: "date-time" },
+        },
+      },
+      ReplayInput: {
+        type: "object",
+        required: ["target"],
+        properties: {
+          target: {
+            oneOf: [
+              { type: "string", enum: ["cli"] },
+              {
+                type: "object",
+                required: ["destination_id"],
+                properties: { destination_id: { type: "string", format: "uuid" } },
+              },
+            ],
+          },
+          override: {
+            type: "object",
+            required: ["method", "path", "headers"],
+            properties: {
+              method: { type: "string" },
+              path: { type: "string", description: 'Below /h/{slug}, starting with "/".' },
+              query: { type: "string", description: 'Raw query string without "?".' },
+              headers: { type: "array", items: { $ref: "#/components/schemas/Pair" } },
+              body_b64: { type: "string", description: "Up to 1 MiB." },
+            },
+          },
+        },
+      },
+      ReplayResult: {
+        type: "object",
+        required: ["target"],
+        properties: {
+          target: { type: "string", enum: ["cli", "destination"] },
+          receivers: { type: "integer", description: "Edge instances that received a CLI replay." },
+          delivery_id: { type: "string", format: "uuid" },
+        },
+      },
+      DestinationFilter: {
+        type: "object",
+        properties: {
+          methods: { type: "array", items: { type: "string" } },
+          header_equals: { type: "object", additionalProperties: { type: "string" } },
+          json_path_equals: {
+            type: "object",
+            additionalProperties: {
+              nullable: true,
+              oneOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }],
+            },
+          },
+        },
+      },
+      Destination: {
+        type: "object",
+        required: [
+          "id",
+          "endpoint_id",
+          "name",
+          "url",
+          "enabled",
+          "filter",
+          "extra_headers",
+          "timeout_ms",
+          "max_attempts",
+          "sign_with_standard_webhooks",
+          "created_at",
+        ],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          endpoint_id: { type: "string", format: "uuid" },
+          name: { type: "string" },
+          url: { type: "string", format: "uri" },
+          enabled: { type: "boolean" },
+          filter: { $ref: "#/components/schemas/DestinationFilter" },
+          extra_headers: { type: "array", items: { $ref: "#/components/schemas/Pair" } },
+          timeout_ms: { type: "integer", minimum: 1000, maximum: 30000 },
+          max_attempts: { type: "integer", minimum: 1, maximum: 20 },
+          sign_with_standard_webhooks: { type: "boolean" },
+          created_at: { type: "string", format: "date-time" },
+        },
+      },
+      DestinationCreated: {
+        allOf: [
+          { $ref: "#/components/schemas/Destination" },
+          {
+            type: "object",
+            properties: {
+              signing_secret: {
+                type: "string",
+                nullable: true,
+                description: "The Standard Webhooks secret (whsec_...), returned once.",
+              },
+            },
+          },
+        ],
+      },
+      DestinationCreate: {
+        type: "object",
+        required: ["name", "url"],
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 80 },
+          url: { type: "string", maxLength: 2048 },
+          enabled: { type: "boolean", default: true },
+          filter: { $ref: "#/components/schemas/DestinationFilter" },
+          extra_headers: {
+            type: "array",
+            maxItems: 20,
+            items: { $ref: "#/components/schemas/Pair" },
+          },
+          timeout_ms: { type: "integer", minimum: 1000, maximum: 30000, default: 10000 },
+          max_attempts: { type: "integer", minimum: 1, maximum: 20, default: 8 },
+          sign_with_standard_webhooks: { type: "boolean", default: false },
+        },
+      },
+      DestinationUpdate: {
+        type: "object",
+        minProperties: 1,
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 80 },
+          url: { type: "string", maxLength: 2048 },
+          enabled: { type: "boolean" },
+          filter: { $ref: "#/components/schemas/DestinationFilter" },
+          extra_headers: {
+            type: "array",
+            maxItems: 20,
+            items: { $ref: "#/components/schemas/Pair" },
+          },
+          timeout_ms: { type: "integer", minimum: 1000, maximum: 30000 },
+          max_attempts: { type: "integer", minimum: 1, maximum: 20 },
+        },
+      },
+      DeliveryStatus: { type: "string", enum: ["pending", "succeeded", "failed", "cancelled"] },
+      Delivery: {
+        type: "object",
+        required: [
+          "id",
+          "request_id",
+          "endpoint_id",
+          "destination_id",
+          "status",
+          "trigger",
+          "attempt_count",
+          "last_status_code",
+          "next_attempt_at",
+          "created_at",
+          "updated_at",
+        ],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          request_id: { type: "string", format: "uuid" },
+          endpoint_id: { type: "string", format: "uuid" },
+          destination_id: { type: "string", format: "uuid" },
+          status: { $ref: "#/components/schemas/DeliveryStatus" },
+          trigger: { type: "string", enum: ["auto", "replay", "manual"] },
+          attempt_count: { type: "integer" },
+          last_status_code: { type: "integer", nullable: true },
+          next_attempt_at: { type: "string", nullable: true, format: "date-time" },
+          created_at: { type: "string", format: "date-time" },
+          updated_at: { type: "string", format: "date-time" },
+        },
+      },
+      DeliveryPage: {
+        type: "object",
+        required: ["data", "next_cursor"],
+        properties: {
+          data: { type: "array", items: { $ref: "#/components/schemas/Delivery" } },
+          next_cursor: { type: "string", nullable: true },
+        },
+      },
+      UsageMetric: {
+        type: "object",
+        required: ["used", "limit"],
+        properties: {
+          used: { type: "integer" },
+          limit: { type: "integer", nullable: true, description: "Null when unlimited." },
+        },
+      },
+      Usage: {
+        type: "object",
+        required: [
+          "plan",
+          "period_start",
+          "period_end",
+          "requests",
+          "bytes",
+          "deliveries",
+          "tunnel_minutes",
+          "endpoints",
+        ],
+        properties: {
+          plan: { type: "string" },
+          period_start: { type: "string", format: "date" },
+          period_end: { type: "string", format: "date" },
+          requests: { $ref: "#/components/schemas/UsageMetric" },
+          bytes: { type: "integer" },
+          deliveries: { type: "integer" },
+          tunnel_minutes: { type: "integer" },
+          endpoints: { $ref: "#/components/schemas/UsageMetric" },
+        },
+      },
+      Me: {
+        type: "object",
+        required: ["org", "key", "user"],
+        properties: {
+          org: {
+            type: "object",
+            required: ["id", "slug", "name", "plan"],
+            properties: {
+              id: { type: "string", format: "uuid" },
+              slug: { type: "string" },
+              name: { type: "string" },
+              plan: { type: "string" },
+            },
+          },
+          key: {
+            type: "object",
+            required: ["id", "name", "prefix", "scopes"],
+            properties: {
+              id: { type: "string", format: "uuid" },
+              name: { type: "string" },
+              prefix: { type: "string" },
+              scopes: { type: "array", items: { $ref: "#/components/schemas/Scope" } },
+            },
+          },
+          user: {
+            type: "object",
+            nullable: true,
+            required: ["email", "name"],
+            properties: { email: { type: "string" }, name: { type: "string" } },
+          },
+        },
+      },
+      Scope: {
+        type: "string",
+        enum: [
+          "endpoints:read",
+          "endpoints:write",
+          "requests:read",
+          "requests:replay",
+          "tunnel",
+          "destinations:write",
+        ],
+      },
+      CliConfig: {
+        type: "object",
+        required: ["app_url", "edge_url", "tunnel_url", "tunnel_protocol"],
+        properties: {
+          app_url: { type: "string", format: "uri" },
+          edge_url: { type: "string", format: "uri" },
+          tunnel_url: { type: "string", format: "uri" },
+          tunnel_protocol: { type: "string", enum: ["hookline.v1"] },
+        },
+      },
+      DeviceCode: {
+        type: "object",
+        required: [
+          "device_code",
+          "user_code",
+          "verification_uri",
+          "verification_uri_complete",
+          "expires_in",
+          "interval",
+        ],
+        properties: {
+          device_code: { type: "string" },
+          user_code: { type: "string", pattern: "^[A-Z]{4}-[A-Z]{4}$" },
+          verification_uri: { type: "string", format: "uri" },
+          verification_uri_complete: { type: "string", format: "uri" },
+          expires_in: { type: "integer" },
+          interval: { type: "integer" },
+        },
+      },
+      DeviceLogin: {
+        type: "object",
+        required: ["api_key", "key_prefix", "org", "user"],
+        properties: {
+          api_key: { type: "string" },
+          key_prefix: { type: "string" },
+          org: {
+            type: "object",
+            required: ["id", "slug", "name"],
+            properties: {
+              id: { type: "string", format: "uuid" },
+              slug: { type: "string" },
+              name: { type: "string" },
+            },
+          },
+          user: {
+            type: "object",
+            required: ["email", "name"],
+            properties: { email: { type: "string" }, name: { type: "string" } },
+          },
+        },
+      },
+    },
+  },
+};

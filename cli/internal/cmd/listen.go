@@ -28,10 +28,10 @@ func tunnelURL(ctx context.Context, s *session) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if c.TunnelURL == "" {
+	if c.TunnelUrl == "" {
 		return "", errors.New("this Hookline instance did not advertise a tunnel URL")
 	}
-	return c.TunnelURL, nil
+	return c.TunnelUrl, nil
 }
 
 // slugs maps endpoint IDs to slugs for display, filled from ready frames.

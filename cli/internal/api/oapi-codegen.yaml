@@ -1,0 +1,7 @@
+# oapi-codegen settings for the Go types of api/openapi.yaml (run by `bun run gen` from the repository root).
+package: api
+output: cli/internal/api/types.gen.go
+generate:
+  models: true
+output-options:
+  skip-prune: true

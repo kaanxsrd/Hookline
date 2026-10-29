@@ -91,6 +91,10 @@ In development the web app and the edge are different origins; the stream answer
 
 The CLI signs in with the device flow (RFC 8628): it shows a code, the user approves it at `/cli/authorize` and picks an organization, and the CLI receives an API key once. Keys are `hk_live_` plus 43 base62 characters; only their SHA-256 hash and an 8-character prefix are stored. The edge checks keys itself (`services/edge/internal/apikey`); the web app checks them for `/api/v1`.
 
+## Public API
+
+`/api/v1` is served by Next.js route handlers and specified by `api/openapi.yaml`, from which `bun run gen` generates TypeScript types, the JSON document served at `/api/v1/openapi.json` (rendered by Scalar at `/docs/api`) and the CLI's Go models. Every authenticated handler goes through one wrapper (`apps/web/lib/api/route.ts`) that checks the bearer key and its scope, takes a token from the key's Redis bucket (sending `RateLimit-*` headers), applies `Idempotency-Key` to POSTs (claim in `idempotency_key`, replay the stored answer for 24 hours) and turns thrown errors into the single error shape. Business rules (plan limits, URL checks, sealing secrets) live in `apps/web/lib` and are shared with the tRPC routers, so the dashboard and the API cannot drift. Contract tests check both directions: each documented operation has a handler, and every answer validates against its schema.
+
 ## Signatures and replay
 
 - **Verification** happens at capture: the edge decrypts the endpoint's secret and runs the provider's scheme (`packages/gocommon/signatures`), storing `verified` or `invalid` on the request. Requests are never rejected for a bad signature; the sender always gets the configured response. The web app has a TypeScript twin (`apps/web/lib/signatures.ts`) for "test against the last request"; both are tested against one vector file.

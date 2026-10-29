@@ -17,7 +17,12 @@ var (
 	// HOOKLINE_URL nor the config file names one. Release builds set it to
 	// the hosted instance; development builds talk to a local stack.
 	defaultURL = "http://localhost:3000"
+	// repository is where releases are published (owner/name on GitHub).
+	repository = "kaanxsrd/hookline"
 )
+
+// Repository is the GitHub repository whose cli-v* releases ship the CLI.
+func Repository() string { return repository }
 
 // DefaultURL is the instance the CLI talks to unless configured otherwise.
 func DefaultURL() string { return defaultURL }

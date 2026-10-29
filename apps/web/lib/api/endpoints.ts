@@ -25,6 +25,7 @@ export const endpointColumns = {
   requestCount: e.requestCount,
   lastRequestAt: e.lastRequestAt,
   retentionHours: e.retentionHours,
+  signatureProvider: e.signatureProvider,
   createdAt: e.createdAt,
 };
 
@@ -38,6 +39,7 @@ type Row = {
   requestCount: number;
   lastRequestAt: Date | null;
   retentionHours: number;
+  signatureProvider: string | null;
   createdAt: Date;
 };
 
@@ -54,6 +56,7 @@ export function endpointJson(row: Row) {
     request_count: row.requestCount,
     last_request_at: row.lastRequestAt,
     retention_hours: row.retentionHours,
+    signature_provider: row.signatureProvider,
     created_at: row.createdAt,
   };
 }

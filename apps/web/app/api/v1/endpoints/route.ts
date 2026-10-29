@@ -1,8 +1,9 @@
 import { schema } from "@hookline/db";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, lt } from "drizzle-orm";
 import { z } from "zod";
 import { endpointColumns, endpointJson } from "@/lib/api/endpoints";
-import { apiError, authenticate, json, readJson } from "@/lib/api/http";
+import { ApiError, json, page, pageQuery, readJson, readQuery } from "@/lib/api/http";
+import { apiRoute } from "@/lib/api/route";
 import { writeAudit } from "@/lib/audit";
 import { clientIp } from "@/lib/client-ip";
 import {
@@ -12,18 +13,20 @@ import {
   QuotaError,
 } from "@/lib/endpoints";
 
+const e = schema.endpoint;
+
 /** Lists the organization's endpoints, newest first. */
-export async function GET(request: Request) {
-  const auth = await authenticate(request, "endpoints:read");
-  if ("response" in auth) return auth.response;
-  const { db, org } = auth.caller;
+export const GET = apiRoute("endpoints:read", async ({ request, caller: { db, org } }) => {
+  const q = readQuery(request, pageQuery);
   const rows = await db
     .select(endpointColumns)
-    .from(schema.endpoint)
-    .where(eq(schema.endpoint.orgId, org.id))
-    .orderBy(desc(schema.endpoint.createdAt));
-  return json({ data: rows.map(endpointJson) });
-}
+    .from(e)
+    .where(and(eq(e.orgId, org.id), q.cursor ? lt(e.id, q.cursor) : undefined))
+    .orderBy(desc(e.id))
+    .limit(q.limit + 1);
+  const p = page(rows, q.limit);
+  return json({ data: p.data.map(endpointJson), next_cursor: p.next_cursor });
+});
 
 const createBody = z.object({
   name: z.string().trim().min(1).max(80),
@@ -32,34 +35,26 @@ const createBody = z.object({
 });
 
 /** Creates an endpoint. */
-export async function POST(request: Request) {
-  const auth = await authenticate(request, "endpoints:write");
-  if ("response" in auth) return auth.response;
-  const parsed = await readJson(request, createBody);
-  if ("response" in parsed) return parsed.response;
-  const { db, org, key } = auth.caller;
-
+export const POST = apiRoute("endpoints:write", async ({ request, caller: { db, org, key } }) => {
+  const input = await readJson(request, createBody);
   let limits: Awaited<ReturnType<typeof checkEndpointQuota>>;
   try {
     limits = await checkEndpointQuota(db, org.id);
   } catch (error) {
-    if (error instanceof QuotaError) return apiError(403, "plan_limit", error.message);
+    if (error instanceof QuotaError) throw new ApiError(403, "plan_limit", error.message);
     throw error;
   }
-  const created = await insertEndpoint(db, org.id, limits, parsed.data);
+  const created = await insertEndpoint(db, org.id, limits, input);
   await writeAudit(db, {
     orgId: org.id,
     actorApiKeyId: key.id,
     action: "endpoint.create",
     targetType: "endpoint",
     targetId: created.id,
-    metadata: { name: parsed.data.name, slug: created.slug, template: parsed.data.template },
+    metadata: { name: input.name, slug: created.slug, template: input.template },
     ip: clientIp(request.headers),
   });
-  const [row] = await db
-    .select(endpointColumns)
-    .from(schema.endpoint)
-    .where(eq(schema.endpoint.id, created.id));
+  const [row] = await db.select(endpointColumns).from(e).where(eq(e.id, created.id));
   if (!row) throw new Error("created endpoint vanished");
   return json(endpointJson(row), 201, { Location: `/api/v1/endpoints/${created.id}` });
-}
+});

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { apiError, json, readJson } from "@/lib/api/http";
+import { ApiError, json, readJson } from "@/lib/api/http";
+import { publicRoute } from "@/lib/api/route";
 import { getDb } from "@/lib/db";
 import { pollDeviceCode } from "@/lib/device-codes";
 
@@ -14,17 +15,14 @@ const messages = {
 } as const;
 
 /** Polled by the CLI until the user approves; returns the API key once. */
-export async function POST(request: Request) {
-  const parsed = await readJson(request, body);
-  if ("response" in parsed) return parsed.response;
-  const result = await pollDeviceCode(getDb(), parsed.data.device_code);
-  if (result.status !== "approved") {
-    return apiError(400, result.status, messages[result.status]);
-  }
+export const POST = publicRoute(async ({ request }) => {
+  const input = await readJson(request, body);
+  const result = await pollDeviceCode(getDb(), input.device_code);
+  if (result.status !== "approved") throw new ApiError(400, result.status, messages[result.status]);
   return json({
     api_key: result.apiKey,
     key_prefix: result.keyPrefix,
     org: result.org,
     user: result.user,
   });
-}
+});

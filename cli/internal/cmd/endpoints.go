@@ -47,7 +47,7 @@ func newEndpointsCmd(opts *globalOptions) *cobra.Command {
 					if e.LastRequestAt != nil {
 						last = e.LastRequestAt.Local().Format(time.DateTime)
 					}
-					_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\n", e.Slug, e.Name, e.Status, e.RequestCount, last, e.URL)
+					_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\n", e.Slug, e.Name, e.Status, e.RequestCount, last, e.Url)
 				}
 				return tw.Flush()
 			},
@@ -75,7 +75,7 @@ func newEndpointsCmd(opts *globalOptions) *cobra.Command {
 					return nil
 				}
 				p.Success("Created %s (%s)", ep.Name, ep.Slug)
-				p.Println(ep.URL)
+				p.Println(ep.Url)
 				return nil
 			},
 		},
@@ -139,7 +139,7 @@ func newEndpointDeleteCmd(opts *globalOptions) *cobra.Command {
 					return errors.New("not deleted: the slug did not match (use --yes in scripts)")
 				}
 			}
-			if err := s.client.DeleteEndpoint(cmd.Context(), ep.ID); err != nil {
+			if err := s.client.DeleteEndpoint(cmd.Context(), ep.Id.String()); err != nil {
 				return err
 			}
 			if opts.json {

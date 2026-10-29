@@ -1,14 +1,12 @@
 import { schema } from "@hookline/db";
 import { eq } from "drizzle-orm";
-import { authenticate, json } from "@/lib/api/http";
+import { json } from "@/lib/api/http";
+import { apiRoute } from "@/lib/api/route";
 import { writeAudit } from "@/lib/audit";
 import { clientIp } from "@/lib/client-ip";
 
 /** Revokes the API key that makes the call (`hookline logout`). */
-export async function POST(request: Request) {
-  const auth = await authenticate(request);
-  if ("response" in auth) return auth.response;
-  const { db, key, org } = auth.caller;
+export const POST = apiRoute(null, async ({ request, caller: { db, key, org } }) => {
   await db.update(schema.apiKey).set({ revokedAt: new Date() }).where(eq(schema.apiKey.id, key.id));
   await writeAudit(db, {
     orgId: org.id,
@@ -20,4 +18,4 @@ export async function POST(request: Request) {
     ip: clientIp(request.headers),
   });
   return json({ revoked: true });
-}
+});

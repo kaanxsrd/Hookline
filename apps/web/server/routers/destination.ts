@@ -1,11 +1,15 @@
 import "server-only";
-import { type Db, schema, uuidv7 } from "@hookline/db";
-import type { DestinationFilter } from "@hookline/db/schema";
+import { type Db, schema } from "@hookline/db";
 import { TRPCError } from "@trpc/server";
 import { and, count, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
-import { checkDestinationUrl } from "@/lib/destination-url";
-import { env } from "@/lib/env";
+import {
+  createDestination,
+  DestinationError,
+  findDestination,
+  settingsSchema,
+  updateDestination,
+} from "@/lib/destinations";
 import { orgPlan } from "@/lib/plans";
 import { destinationSigningContext, newSigningSecret, openSecret, sealSecret } from "@/lib/secrets";
 import { orgProcedure, router } from "../trpc/init";
@@ -15,82 +19,28 @@ import { orgEndpoint } from "./request";
 const dst = schema.destination;
 const dlv = schema.delivery;
 
-/** Header names a destination may not set: they describe the connection or are Hookline's own. */
-const RESERVED_HEADERS =
-  /^(host|content-length|transfer-encoding|connection|keep-alive|upgrade|te|trailer|proxy-.*|x-hookline-.*|webhook-(id|timestamp|signature))$/i;
-
-const headerName = z
-  .string()
-  .trim()
-  .regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,100}$/, "Not a valid header name")
-  .refine((n) => !RESERVED_HEADERS.test(n), "Hookline sets this header itself");
-const headerValue = z
-  .string()
-  .max(4000)
-  .regex(/^[^\r\n\0]*$/, "Header values cannot contain line breaks");
-
-const filterSchema = z.object({
-  methods: z
-    .array(z.string().regex(/^[A-Z]{1,16}$/))
-    .max(16)
-    .optional(),
-  header_equals: z.record(headerName, headerValue).optional(),
-  json_path_equals: z
-    .record(
-      z
-        .string()
-        .trim()
-        .min(1)
-        .max(200)
-        .regex(/^(\$\.?)?[^\s]+$/, "Use a path such as data.object.status"),
-      z.union([z.string().max(1000), z.number(), z.boolean(), z.null()]),
-    )
-    .optional(),
-});
-
-const settingsSchema = z.object({
-  name: z.string().trim().min(1, "Give the destination a name").max(80),
-  url: z.string().trim().max(2048),
-  enabled: z.boolean().default(true),
-  filter: filterSchema.default({}),
-  extraHeaders: z
-    .array(z.tuple([headerName, headerValue]))
-    .max(20)
-    .default([]),
-  timeoutMs: z.number().int().min(1000).max(30_000).default(10_000),
-  maxAttempts: z.number().int().min(1).max(20).default(8),
-  signWithStandardWebhooks: z.boolean().default(false),
-});
-
-/** Drops empty filter parts so `{}` means "everything". */
-function normalizeFilter(f: z.infer<typeof filterSchema>): DestinationFilter {
-  return {
-    ...(f.methods?.length ? { methods: f.methods } : {}),
-    ...(f.header_equals && Object.keys(f.header_equals).length
-      ? { header_equals: f.header_equals }
-      : {}),
-    ...(f.json_path_equals && Object.keys(f.json_path_equals).length
-      ? { json_path_equals: f.json_path_equals }
-      : {}),
-  };
-}
-
-async function assertUrl(url: string) {
-  const problem = await checkDestinationUrl(url, {
-    allowPrivate: env().ALLOW_PRIVATE_DESTINATIONS,
-  });
-  if (problem) throw new TRPCError({ code: "BAD_REQUEST", message: problem });
+function toTrpc(error: unknown): never {
+  if (error instanceof DestinationError) {
+    throw new TRPCError({
+      code:
+        error.code === "not_found"
+          ? "NOT_FOUND"
+          : error.code === "plan_limit"
+            ? "FORBIDDEN"
+            : "BAD_REQUEST",
+      message: error.message,
+    });
+  }
+  throw error;
 }
 
 /** A destination of the caller's organization, with its endpoint, or NOT_FOUND. */
 async function ownedDestination(ctx: { db: Db; org: { id: string } }, id: string) {
-  const [row] = await ctx.db
-    .select({ destination: dst, endpointSlug: schema.endpoint.slug })
-    .from(dst)
-    .innerJoin(schema.endpoint, eq(schema.endpoint.id, dst.endpointId))
-    .where(and(eq(dst.id, id), eq(schema.endpoint.orgId, ctx.org.id)));
-  if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Destination not found." });
-  return row;
+  try {
+    return await findDestination(ctx.db, ctx.org.id, id);
+  } catch (error) {
+    toTrpc(error);
+  }
 }
 
 function sealFor(id: string, secret: string) {
@@ -157,36 +107,13 @@ export const destinationRouter = router({
     .input(settingsSchema.extend({ endpointSlug: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const endpoint = await orgEndpoint(ctx, input.endpointSlug);
-      const { limits, plan } = await orgPlan(ctx.db, ctx.org.id);
-      const [existing] = await ctx.db
-        .select({ n: count() })
-        .from(dst)
-        .where(eq(dst.endpointId, endpoint.id));
-      const max = limits.destinations_per_endpoint;
-      if (max !== null && (existing?.n ?? 0) >= max) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: `The ${plan} plan allows ${max} destination${max === 1 ? "" : "s"} per endpoint.`,
-        });
-      }
-      await assertUrl(input.url);
-
-      // The ID is part of the secret's associated data, so it exists before the row.
-      const id = uuidv7();
-      const secret = input.signWithStandardWebhooks ? newSigningSecret() : null;
-      await ctx.db.insert(dst).values({
-        id,
-        endpointId: endpoint.id,
-        name: input.name,
-        url: input.url,
-        enabled: input.enabled,
-        filter: normalizeFilter(input.filter),
-        extraHeaders: input.extraHeaders,
-        timeoutMs: input.timeoutMs,
-        maxAttempts: input.maxAttempts,
-        signWithStandardWebhooks: input.signWithStandardWebhooks,
-        signingSecretEnc: secret ? sealFor(id, secret) : null,
-      });
+      const { endpointSlug: _slug, ...settings } = input;
+      const { id, signingSecret: secret } = await createDestination(
+        ctx.db,
+        ctx.org.id,
+        endpoint.id,
+        settings,
+      ).catch(toTrpc);
       ctx.audit({
         type: "destination",
         id,
@@ -200,29 +127,16 @@ export const destinationRouter = router({
     .input(settingsSchema.partial().extend({ id: z.uuid() }))
     .mutation(async ({ ctx, input }) => {
       const { destination: current, endpointSlug } = await ownedDestination(ctx, input.id);
-      if (input.url !== undefined && input.url !== current.url) await assertUrl(input.url);
-
-      let signingSecret: string | null = null;
-      let signingSecretEnc = current.signingSecretEnc;
-      if (input.signWithStandardWebhooks && !signingSecretEnc) {
-        signingSecret = newSigningSecret();
-        signingSecretEnc = sealFor(current.id, signingSecret);
-      }
-      const { id: _id, filter, ...rest } = input;
-      await ctx.db
-        .update(dst)
-        .set({
-          ...rest,
-          ...(filter !== undefined ? { filter: normalizeFilter(filter) } : {}),
-          signingSecretEnc,
-        })
-        .where(eq(dst.id, current.id));
+      const { id: _id, orgSlug: _org, ...changes } = input;
+      const { signingSecret, changed } = await updateDestination(ctx.db, current, changes).catch(
+        toTrpc,
+      );
       ctx.audit({
         type: "destination",
         id: current.id,
         metadata: {
           endpoint: endpointSlug,
-          changed: Object.keys(rest).concat(filter !== undefined ? ["filter"] : []),
+          changed,
         },
       });
       return { ok: true, signingSecret };

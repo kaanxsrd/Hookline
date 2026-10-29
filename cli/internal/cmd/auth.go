@@ -48,10 +48,10 @@ func newLoginCmd(opts *globalOptions) *cobra.Command {
 				return err
 			}
 			p.Println("Your one-time code: " + p.Bold(dc.UserCode))
-			if !noBrowser && openBrowser(dc.VerificationURIComplete) {
-				p.Status("Opened %s", dc.VerificationURIComplete)
+			if !noBrowser && openBrowser(dc.VerificationUriComplete) {
+				p.Status("Opened %s", dc.VerificationUriComplete)
 			} else {
-				p.Println("Open " + p.Info(dc.VerificationURIComplete) + " to approve this login.")
+				p.Println("Open " + p.Info(dc.VerificationUriComplete) + " to approve this login.")
 			}
 			p.Status("Waiting for approval…")
 
@@ -66,7 +66,7 @@ func newLoginCmd(opts *globalOptions) *cobra.Command {
 			}
 			cfg.URL = base
 			cfg.Orgs[login.Org.Slug] = config.Profile{
-				APIKey: login.APIKey, KeyPrefix: login.KeyPrefix, OrgName: login.Org.Name, UserEmail: login.User.Email,
+				APIKey: login.ApiKey, KeyPrefix: login.KeyPrefix, OrgName: login.Org.Name, UserEmail: login.User.Email,
 			}
 			cfg.DefaultOrg = login.Org.Slug
 			if err := cfg.Save(); err != nil {
@@ -84,7 +84,7 @@ func newLoginCmd(opts *globalOptions) *cobra.Command {
 	return cmd
 }
 
-func pollLogin(ctx context.Context, client *api.Client, dc api.DeviceCode) (api.Login, error) {
+func pollLogin(ctx context.Context, client *api.Client, dc api.DeviceCode) (api.DeviceLogin, error) {
 	interval := time.Duration(dc.Interval) * time.Second
 	if interval <= 0 {
 		interval = 200 * time.Millisecond // servers send 5 s; this only guards against 0
@@ -95,7 +95,7 @@ func pollLogin(ctx context.Context, client *api.Client, dc api.DeviceCode) (api.
 		select {
 		case <-ctx.Done():
 			t.Stop()
-			return api.Login{}, ctx.Err()
+			return api.DeviceLogin{}, ctx.Err()
 		case <-t.C:
 		}
 		login, err := client.PollLogin(ctx, dc.DeviceCode)
@@ -106,10 +106,10 @@ func pollLogin(ctx context.Context, client *api.Client, dc api.DeviceCode) (api.
 		case api.IsCode(err, "slow_down"):
 			interval += 5 * time.Second
 		default:
-			return api.Login{}, err
+			return api.DeviceLogin{}, err
 		}
 		if time.Now().After(deadline) {
-			return api.Login{}, errors.New("the code expired before it was approved: run `hookline login` again")
+			return api.DeviceLogin{}, errors.New("the code expired before it was approved: run `hookline login` again")
 		}
 	}
 }

@@ -71,9 +71,9 @@ func newTriggerCmd(opts *globalOptions) *cobra.Command {
 				secret = os.Getenv("HOOKLINE_SIGNING_SECRET")
 			}
 			if secret == "" && fx.Provider != "discord" {
-				sig, err := s.client.GetSignatureSecret(ctx, ep.ID)
+				sig, err := s.client.GetSignatureSecret(ctx, ep.Id.String())
 				switch {
-				case err == nil && sig.Provider == fx.Provider:
+				case err == nil && string(sig.Provider) == fx.Provider:
 					secret = sig.Secret
 				case err == nil:
 					p.Warn("%s verifies %s signatures; this %s event will show as Invalid", ep.Slug, sig.Provider, fx.Provider)
@@ -90,7 +90,7 @@ func newTriggerCmd(opts *globalOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			target := strings.TrimRight(ep.URL, "/") + built.Path
+			target := strings.TrimRight(ep.Url, "/") + built.Path
 			req, err := http.NewRequestWithContext(ctx, built.Method, target, bytes.NewReader(built.Body))
 			if err != nil {
 				return err

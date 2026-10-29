@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { apiError, authenticate, json, readJson } from "@/lib/api/http";
+import { ApiError, json, notFound, readJson } from "@/lib/api/http";
 import { requestEndpoint } from "@/lib/api/requests";
+import { apiRoute } from "@/lib/api/route";
 import { writeAudit } from "@/lib/audit";
 import { loadCaptured } from "@/lib/captured";
 import { clientIp } from "@/lib/client-ip";
@@ -12,8 +13,6 @@ import {
   replayToDestination,
   resolveEdit,
 } from "@/lib/replay";
-
-type Params = { params: Promise<{ id: string }> };
 
 const body = z.object({
   target: z.union([z.literal("cli"), z.object({ destination_id: z.uuid() })]),
@@ -30,65 +29,63 @@ const body = z.object({
 });
 
 /** Sends a captured request again, to a destination or to the connected CLIs. */
-export async function POST(request: Request, { params }: Params) {
-  const auth = await authenticate(request, "requests:replay");
-  if ("response" in auth) return auth.response;
-  const parsed = await readJson(request, body);
-  if ("response" in parsed) return parsed.response;
-  const { db, org, key } = auth.caller;
-  const { id } = await params;
+export const POST = apiRoute<{ id: string }>(
+  "requests:replay",
+  async ({ request, caller: { db, org, key }, params }) => {
+    const { target, override } = await readJson(request, body);
+    const endpoint = await requestEndpoint(db, org.id, params.id);
+    const captured = endpoint && (await loadCaptured(db, endpoint, params.id, MAX_EDIT_BODY_BYTES));
+    if (!endpoint || !captured) throw notFound("request");
 
-  const endpoint = await requestEndpoint(db, org.id, id);
-  const captured = endpoint && (await loadCaptured(db, endpoint, id, MAX_EDIT_BODY_BYTES));
-  if (!endpoint || !captured)
-    return apiError(404, "not_found", "No such request in this organization.");
-
-  const { target, override } = parsed.data;
-  try {
     let edit: ReturnType<typeof resolveEdit> | undefined;
-    if (override) {
-      const e = editSchema.safeParse({
-        method: override.method,
-        path: override.path,
-        query: override.query ?? "",
-        headers: override.headers,
-        ...(override.body_b64 !== undefined ? { bodyBase64: override.body_b64 } : {}),
-      });
-      if (!e.success) {
-        return apiError(400, "invalid_request", "The override is invalid.", {
-          fields: z.flattenError(e.error).fieldErrors,
+    try {
+      if (override) {
+        const parsed = editSchema.safeParse({
+          method: override.method,
+          path: override.path,
+          query: override.query ?? "",
+          headers: override.headers,
+          ...(override.body_b64 !== undefined ? { bodyBase64: override.body_b64 } : {}),
         });
+        if (!parsed.success) {
+          throw new ApiError(400, "invalid_request", "The override is invalid.", {
+            fields: z.flattenError(parsed.error).fieldErrors,
+          });
+        }
+        edit = resolveEdit(captured, parsed.data);
       }
-      edit = resolveEdit(captured, e.data);
+      const result =
+        target === "cli"
+          ? { target: "cli" as const, receivers: await replayToCli(captured, edit) }
+          : {
+              target: "destination" as const,
+              delivery_id: await replayToDestination(db, {
+                orgId: org.id,
+                endpointId: endpoint.id,
+                requestId: captured.id,
+                destinationId: target.destination_id,
+                ...(edit ? { override: edit } : {}),
+              }),
+            };
+      await writeAudit(db, {
+        orgId: org.id,
+        actorApiKeyId: key.id,
+        action: "request.replayed",
+        targetType: "request",
+        targetId: captured.id,
+        metadata: { to: result.target, edited: Boolean(override) },
+        ip: clientIp(request.headers),
+      });
+      return json(result, 202);
+    } catch (error) {
+      if (error instanceof ReplayError) {
+        throw new ApiError(
+          error.code === "not_found" ? 404 : error.code === "no_tunnel" ? 409 : 400,
+          error.code,
+          error.message,
+        );
+      }
+      throw error;
     }
-    const result =
-      target === "cli"
-        ? { target: "cli", receivers: await replayToCli(captured, edit) }
-        : {
-            target: "destination",
-            delivery_id: await replayToDestination(db, {
-              orgId: org.id,
-              endpointId: endpoint.id,
-              requestId: captured.id,
-              destinationId: target.destination_id,
-              ...(edit ? { override: edit } : {}),
-            }),
-          };
-    await writeAudit(db, {
-      orgId: org.id,
-      actorApiKeyId: key.id,
-      action: "request.replayed",
-      targetType: "request",
-      targetId: captured.id,
-      metadata: { to: result.target, edited: Boolean(override) },
-      ip: clientIp(request.headers),
-    });
-    return json(result, 202);
-  } catch (error) {
-    if (error instanceof ReplayError) {
-      const status = error.code === "not_found" ? 404 : error.code === "no_tunnel" ? 409 : 400;
-      return apiError(status, error.code, error.message);
-    }
-    throw error;
-  }
-}
+  },
+);

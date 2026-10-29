@@ -1,9 +1,11 @@
-// Package api is a small client for Hookline's REST API (/api/v1).
+// Package api is a client for Hookline's REST API (/api/v1). The models in
+// types.gen.go are generated from api/openapi.yaml by `bun run gen`.
 package api
 
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,16 +14,18 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-// Error is an error answer from the API.
-type Error struct {
+// ResponseError is an error answer from the API ({"error": {"code", "message"}}).
+type ResponseError struct {
 	Status  int
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    string
+	Message string
 }
 
-func (e *Error) Error() string {
+func (e *ResponseError) Error() string {
 	if e.Message != "" {
 		return e.Message
 	}
@@ -68,20 +72,18 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		return fmt.Errorf("cannot reach %s: %w", c.BaseURL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {
 		return err
 	}
 	if resp.StatusCode >= 400 {
-		var e struct {
-			Error Error `json:"error"`
-		}
+		var e Error
 		_ = json.Unmarshal(raw, &e)
-		e.Error.Status = resp.StatusCode
-		if e.Error.Code == "" {
-			e.Error.Code = http.StatusText(resp.StatusCode)
+		apiErr := &ResponseError{Status: resp.StatusCode, Code: e.Error.Code, Message: e.Error.Message}
+		if apiErr.Code == "" {
+			apiErr.Code = http.StatusText(resp.StatusCode)
 		}
-		return &e.Error
+		return apiErr
 	}
 	if out == nil || len(raw) == 0 {
 		return nil
@@ -94,67 +96,28 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 
 // IsCode reports whether err is an API error with code.
 func IsCode(err error, code string) bool {
-	var e *Error
+	var e *ResponseError
 	return errors.As(err, &e) && e.Code == code
-}
-
-// DeviceCode starts a device login.
-type DeviceCode struct {
-	DeviceCode              string `json:"device_code"`
-	UserCode                string `json:"user_code"`
-	VerificationURI         string `json:"verification_uri"`
-	VerificationURIComplete string `json:"verification_uri_complete"`
-	ExpiresIn               int    `json:"expires_in"`
-	Interval                int    `json:"interval"`
 }
 
 // StartLogin requests a device code.
 func (c *Client) StartLogin(ctx context.Context, clientName string) (DeviceCode, error) {
 	var out DeviceCode
-	err := c.do(ctx, http.MethodPost, "/api/v1/cli/device-codes", map[string]string{"client_name": clientName}, &out)
+	err := c.do(ctx, http.MethodPost, "/api/v1/cli/device-codes", CreateDeviceCodeJSONRequestBody{ClientName: &clientName}, &out)
 	return out, err
 }
 
-// Login is the result of an approved device login.
-type Login struct {
-	APIKey    string `json:"api_key"`
-	KeyPrefix string `json:"key_prefix"`
-	Org       Org    `json:"org"`
-	User      User   `json:"user"`
-}
-
-// Org identifies an organization.
-type Org struct {
-	ID   string `json:"id"`
-	Slug string `json:"slug"`
-	Name string `json:"name"`
-	Plan string `json:"plan,omitempty"`
-}
-
-// User identifies a person.
-type User struct {
-	Email string `json:"email"`
-	Name  string `json:"name"`
-}
-
-// PollLogin polls once. Pending states come back as *Error with codes
+// PollLogin polls once. Pending states come back as *ResponseError with codes
 // authorization_pending or slow_down.
-func (c *Client) PollLogin(ctx context.Context, deviceCode string) (Login, error) {
-	var out Login
-	err := c.do(ctx, http.MethodPost, "/api/v1/cli/device-codes/poll", map[string]string{"device_code": deviceCode}, &out)
+func (c *Client) PollLogin(ctx context.Context, deviceCode string) (DeviceLogin, error) {
+	var out DeviceLogin
+	err := c.do(ctx, http.MethodPost, "/api/v1/cli/device-codes/poll", PollDeviceCodeJSONRequestBody{DeviceCode: deviceCode}, &out)
 	return out, err
-}
-
-// InstanceConfig describes where tunnels connect.
-type InstanceConfig struct {
-	AppURL    string `json:"app_url"`
-	EdgeURL   string `json:"edge_url"`
-	TunnelURL string `json:"tunnel_url"`
 }
 
 // Config fetches the instance's public configuration.
-func (c *Client) Config(ctx context.Context) (InstanceConfig, error) {
-	var out InstanceConfig
+func (c *Client) Config(ctx context.Context) (CliConfig, error) {
+	var out CliConfig
 	err := c.do(ctx, http.MethodGet, "/api/v1/cli/config", nil, &out)
 	return out, err
 }
@@ -164,18 +127,6 @@ func (c *Client) Logout(ctx context.Context) error {
 	return c.do(ctx, http.MethodPost, "/api/v1/cli/logout", nil, nil)
 }
 
-// Me describes the API key's owner.
-type Me struct {
-	Org Org `json:"org"`
-	Key struct {
-		ID     string   `json:"id"`
-		Name   string   `json:"name"`
-		Prefix string   `json:"prefix"`
-		Scopes []string `json:"scopes"`
-	} `json:"key"`
-	User *User `json:"user"`
-}
-
 // Me fetches the key's organization and creator.
 func (c *Client) Me(ctx context.Context) (Me, error) {
 	var out Me
@@ -183,27 +134,25 @@ func (c *Client) Me(ctx context.Context) (Me, error) {
 	return out, err
 }
 
-// Endpoint is an endpoint as the API returns it.
-type Endpoint struct {
-	ID            string     `json:"id"`
-	Slug          string     `json:"slug"`
-	URL           string     `json:"url"`
-	Name          string     `json:"name"`
-	Description   string     `json:"description"`
-	Status        string     `json:"status"`
-	ResponseMode  string     `json:"response_mode"`
-	RequestCount  int64      `json:"request_count"`
-	LastRequestAt *time.Time `json:"last_request_at"`
-	CreatedAt     time.Time  `json:"created_at"`
-}
-
-// ListEndpoints returns the organization's endpoints, newest first.
+// ListEndpoints returns every endpoint of the organization, newest first.
 func (c *Client) ListEndpoints(ctx context.Context) ([]Endpoint, error) {
-	var out struct {
-		Data []Endpoint `json:"data"`
+	var all []Endpoint
+	cursor := ""
+	for {
+		path := "/api/v1/endpoints?limit=100"
+		if cursor != "" {
+			path += "&cursor=" + url.QueryEscape(cursor)
+		}
+		var page EndpointPage
+		if err := c.do(ctx, http.MethodGet, path, nil, &page); err != nil {
+			return nil, err
+		}
+		all = append(all, page.Data...)
+		if page.NextCursor == nil || *page.NextCursor == "" {
+			return all, nil
+		}
+		cursor = *page.NextCursor
 	}
-	err := c.do(ctx, http.MethodGet, "/api/v1/endpoints", nil, &out)
-	return out.Data, err
 }
 
 // GetEndpoint looks an endpoint up by ID or slug.
@@ -216,31 +165,13 @@ func (c *Client) GetEndpoint(ctx context.Context, ref string) (Endpoint, error) 
 // CreateEndpoint creates an endpoint.
 func (c *Client) CreateEndpoint(ctx context.Context, name string) (Endpoint, error) {
 	var out Endpoint
-	err := c.do(ctx, http.MethodPost, "/api/v1/endpoints", map[string]string{"name": name}, &out)
+	err := c.do(ctx, http.MethodPost, "/api/v1/endpoints", EndpointCreate{Name: name}, &out)
 	return out, err
 }
 
 // DeleteEndpoint deletes an endpoint by ID or slug.
 func (c *Client) DeleteEndpoint(ctx context.Context, ref string) error {
 	return c.do(ctx, http.MethodDelete, "/api/v1/endpoints/"+url.PathEscape(ref), nil, nil)
-}
-
-// Request is a captured request with its body.
-type Request struct {
-	ID       string `json:"id"`
-	Endpoint struct {
-		ID   string `json:"id"`
-		Slug string `json:"slug"`
-	} `json:"endpoint"`
-	Method      string      `json:"method"`
-	Path        string      `json:"path"`
-	Query       [][2]string `json:"query"`
-	Headers     [][2]string `json:"headers"`
-	ContentType *string     `json:"content_type"`
-	BodySize    int         `json:"body_size"`
-	BodyB64     *string     `json:"body_b64"`
-	BodyOmitted bool        `json:"body_omitted"`
-	ReceivedAt  time.Time   `json:"received_at"`
 }
 
 // GetRequest fetches a captured request.
@@ -252,39 +183,48 @@ func (c *Client) GetRequest(ctx context.Context, id string) (Request, error) {
 
 // Override is an edited request for a replay.
 type Override struct {
-	Method  string      `json:"method"`
-	Path    string      `json:"path"`
-	Query   string      `json:"query"`
-	Headers [][2]string `json:"headers"`
-	BodyB64 *string     `json:"body_b64,omitempty"`
-}
-
-// ReplayResult says where a replay went.
-type ReplayResult struct {
-	Target     string `json:"target"`
-	Receivers  int    `json:"receivers"`
-	DeliveryID string `json:"delivery_id"`
+	Method  string
+	Path    string
+	Query   string
+	Headers [][2]string
+	Body    []byte
 }
 
 // Replay sends a captured request to a destination (destinationID) or, with
 // an empty destinationID, to the connected CLIs.
 func (c *Client) Replay(ctx context.Context, id, destinationID string, override *Override) (ReplayResult, error) {
-	body := map[string]any{"target": "cli"}
-	if destinationID != "" {
-		body["target"] = map[string]string{"destination_id": destinationID}
+	var in ReplayInput
+	if destinationID == "" {
+		if err := in.Target.FromReplayInputTarget0(ReplayInputTarget0Cli); err != nil {
+			return ReplayResult{}, err
+		}
+	} else {
+		dest, err := uuidFrom(destinationID)
+		if err != nil {
+			return ReplayResult{}, fmt.Errorf("--destination must be a destination ID: %w", err)
+		}
+		if err := in.Target.FromReplayInputTarget1(ReplayInputTarget1{DestinationId: dest}); err != nil {
+			return ReplayResult{}, err
+		}
 	}
 	if override != nil {
-		body["override"] = override
+		in.Override = &struct {
+			BodyB64 *string `json:"body_b64,omitempty"`
+			Headers []Pair  `json:"headers"`
+			Method  string  `json:"method"`
+			Path    string  `json:"path"`
+			Query   *string `json:"query,omitempty"`
+		}{Method: override.Method, Path: override.Path, Query: &override.Query, Headers: ToPairs(override.Headers), BodyB64: b64(override.Body)}
 	}
 	var out ReplayResult
-	err := c.do(ctx, http.MethodPost, "/api/v1/requests/"+url.PathEscape(id)+"/replay", body, &out)
+	err := c.do(ctx, http.MethodPost, "/api/v1/requests/"+url.PathEscape(id)+"/replay", in, &out)
 	return out, err
 }
 
 // SignatureSecret is an endpoint's verification setup.
 type SignatureSecret struct {
-	Provider string `json:"provider"`
-	Secret   string `json:"secret"`
+	Provider SignatureProvider `json:"provider"`
+	Secret   string            `json:"secret"`
 }
 
 // GetSignatureSecret fetches the endpoint's signature provider and secret.
@@ -292,4 +232,35 @@ func (c *Client) GetSignatureSecret(ctx context.Context, ref string) (SignatureS
 	var out SignatureSecret
 	err := c.do(ctx, http.MethodGet, "/api/v1/endpoints/"+url.PathEscape(ref)+"/signature-secret", nil, &out)
 	return out, err
+}
+
+// FromPairs turns API pairs into fixed-size pairs, dropping malformed ones.
+func FromPairs(pairs []Pair) [][2]string {
+	out := make([][2]string, 0, len(pairs))
+	for _, p := range pairs {
+		if len(p) == 2 {
+			out = append(out, [2]string{p[0], p[1]})
+		}
+	}
+	return out
+}
+
+// ToPairs turns fixed-size pairs into API pairs.
+func ToPairs(pairs [][2]string) []Pair {
+	out := make([]Pair, 0, len(pairs))
+	for _, p := range pairs {
+		out = append(out, Pair{p[0], p[1]})
+	}
+	return out
+}
+
+func uuidFrom(s string) (openapi_types.UUID, error) {
+	var u openapi_types.UUID
+	err := u.UnmarshalText([]byte(s))
+	return u, err
+}
+
+func b64(body []byte) *string {
+	s := base64.StdEncoding.EncodeToString(body)
+	return &s
 }

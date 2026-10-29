@@ -16,6 +16,9 @@ export default async function SettingsLayout({
   const tabs = [
     { href: `/${orgSlug}/settings/general`, label: "General" },
     { href: `/${orgSlug}/settings/members`, label: "Members" },
+    ...(hasRole(org.role, "member")
+      ? [{ href: `/${orgSlug}/settings/api-keys`, label: "API keys" }]
+      : []),
     ...(hasRole(org.role, "admin")
       ? [{ href: `/${orgSlug}/settings/audit-log`, label: "Audit log" }]
       : []),
