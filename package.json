@@ -1,0 +1,35 @@
+{
+  "name": "hookline",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Catch every webhook. Replay anything. Pipe it to localhost.",
+  "license": "MIT",
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "bun": ">=1.3"
+  },
+  "workspaces": [
+    "apps/web",
+    "services/edge",
+    "services/worker",
+    "cli",
+    "packages/gocommon"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "biome lint . && turbo run lint",
+    "typecheck": "tsc -p scripts --noEmit && turbo run typecheck",
+    "test": "bun test scripts && turbo run test",
+    "format": "biome format --write .",
+    "check": "biome check . && tsc -p scripts --noEmit && bun test scripts && turbo run typecheck lint test",
+    "check:fix": "biome check --write .",
+    "setup:go": "bun scripts/go.ts setup"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "@types/bun": "1.4.4",
+    "turbo": "2.11.10",
+    "typescript": "6.0.3"
+  }
+}

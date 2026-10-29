@@ -1,0 +1,86 @@
+# Local development infrastructure. Every port binds to 127.0.0.1 only.
+# Host ports default away from 5432/6379 so Hookline coexists with other
+# projects; override them in .env (POSTGRES_PORT, REDIS_PORT, ...).
+name: hookline
+
+services:
+  postgres:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_USER: hookline
+      POSTGRES_PASSWORD: hookline
+      POSTGRES_DB: hookline
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hookline -d hookline"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.4.12-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # The upstream minio/minio images are no longer published; Chainguard builds
+  # MinIO from source. Pinned by digest for reproducible local setups.
+  minio:
+    image: cgr.dev/chainguard/minio@sha256:0dab2f9fee1c1139ae8753b5e35bb4461af2a276cfe0923a2504c75a6170bc64
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-hookline}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-hookline-dev-secret}
+    ports:
+      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      # The image has bash but no curl: speak HTTP over /dev/tcp.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /minio/health/live HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          read -r status <&3 && [[ $$status == *" 200 "* ]]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Creates the private payload bucket once MinIO is healthy, then exits.
+  minio-init:
+    image: cgr.dev/chainguard/minio-client@sha256:4c288033f700b35846037c53ce39ba287f4bed0a571518c1f4d8d2788beb5cb5
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MC_HOST_local: http://${S3_ACCESS_KEY_ID:-hookline}:${S3_SECRET_ACCESS_KEY:-hookline-dev-secret}@minio:9000
+    command: ["mb", "--ignore-existing", "local/${S3_BUCKET:-hookline-payloads}"]
+    restart: on-failure:5
+
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "127.0.0.1:${SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

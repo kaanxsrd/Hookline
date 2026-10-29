@@ -1,0 +1,11 @@
+{
+  "name": "@hookline/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The hookline command-line tool.",
+  "license": "MIT",
+  "scripts": {
+    "lint": "bun ../scripts/go.ts lint",
+    "test": "bun ../scripts/go.ts test"
+  }
+}

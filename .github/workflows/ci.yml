@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: Cache pinned Go tools
+        uses: actions/cache@v6
+        with:
+          path: .tools
+          key: go-tools-${{ runner.os }}-${{ hashFiles('tools/go.sum') }}
+
+      - name: Cache Turborepo
+        uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      # Biome, tsc, golangci-lint, Go tests (with -race; gcc ships with the runner) and Vitest.
+      - run: bun run check
+
+      - run: bun run build
+
+      - name: Generated files are committed
+        run: git diff --exit-code

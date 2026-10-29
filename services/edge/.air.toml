@@ -1,0 +1,22 @@
+# Hot reload for `bun run dev`. scripts/go.ts runs air from the repository root
+# so changes in packages/gocommon also trigger a rebuild.
+root = "."
+tmp_dir = "services/edge/tmp"
+
+[build]
+cmd = "go build -o ./services/edge/tmp/edge.exe ./services/edge"
+entrypoint = ["./services/edge/tmp/edge.exe"]
+include_dir = ["services/edge", "packages/gocommon"]
+include_ext = ["go"]
+exclude_dir = ["services/edge/tmp"]
+exclude_regex = ['_test[.]go$']
+delay = 300
+send_interrupt = true
+kill_delay = "3s"
+stop_on_error = true
+
+[log]
+main_only = true
+
+[misc]
+clean_on_exit = true

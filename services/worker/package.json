@@ -1,0 +1,15 @@
+{
+  "name": "@hookline/worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Go worker: forwarding, retries, retention, rollups.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "bun ../../scripts/go.ts dev",
+    "lint": "bun ../../scripts/go.ts lint",
+    "test": "bun ../../scripts/go.ts test"
+  },
+  "dependencies": {
+    "@hookline/gocommon": "workspace:*"
+  }
+}

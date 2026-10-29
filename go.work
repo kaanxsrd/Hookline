@@ -1,0 +1,8 @@
+go 1.27.0
+
+use (
+	./cli
+	./packages/gocommon
+	./services/edge
+	./services/worker
+)
