@@ -69,6 +69,9 @@ func (e *env) count(table string) int {
 func TestRetentionDeletesExpiredRequestsAndBodies(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
+	// Pro keeps up to 14 days, so both endpoints' settings apply.
+	_, err := e.pool.Exec(t.Context(), `INSERT INTO subscription (org_id, plan) VALUES ($1, 'pro')`, e.org)
+	require.NoError(t, err)
 	short := e.endpoint("shortRetent1", 24)
 	long := e.endpoint("longRetent01", 24*14)
 
@@ -79,7 +82,7 @@ func TestRetentionDeletesExpiredRequestsAndBodies(t *testing.T) {
 
 	var destID uuid.UUID
 	require.NoError(t, e.pool.QueryRow(t.Context(), `INSERT INTO destination (endpoint_id, name, url) VALUES ($1, 'd', 'https://x.example') RETURNING id`, short).Scan(&destID))
-	_, err := e.pool.Exec(t.Context(), `
+	_, err = e.pool.Exec(t.Context(), `
 		INSERT INTO delivery (request_id, request_received_at, destination_id, endpoint_id)
 		SELECT id, received_at, $1, endpoint_id FROM request WHERE endpoint_id = $2`, destID, short)
 	require.NoError(t, err)
@@ -190,4 +193,33 @@ func TestOrphanedBodiesAreDeleted(t *testing.T) {
 			require.ErrorIs(t, err, blob.ErrNotFound, key)
 		}
 	}
+}
+
+func TestRetentionIsCappedByThePlan(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	// Configured for 14 days under a bigger plan, now on free (24 hours).
+	ep := e.endpoint("downgraded01", 24*14)
+	old := e.request(ep, 48*time.Hour, "")
+	keep := e.request(ep, time.Hour, "")
+
+	require.NoError(t, (&retentionWorker{d: e.d}).Work(t.Context(), &river.Job[retentionArgs]{}))
+	var ids []uuid.UUID
+	rows, err := e.pool.Query(t.Context(), `SELECT id FROM request WHERE endpoint_id = $1`, ep)
+	require.NoError(t, err)
+	for rows.Next() {
+		var id uuid.UUID
+		require.NoError(t, rows.Scan(&id))
+		ids = append(ids, id)
+	}
+	assert.Equal(t, []uuid.UUID{keep}, ids)
+	assert.NotContains(t, ids, old)
+
+	// The unlimited override keeps the endpoint's own setting.
+	e.d.PlanOverride = "unlimited"
+	older := e.request(ep, 72*time.Hour, "")
+	require.NoError(t, (&retentionWorker{d: e.d}).Work(t.Context(), &river.Job[retentionArgs]{}))
+	var n int
+	require.NoError(t, e.pool.QueryRow(t.Context(), `SELECT count(*) FROM request WHERE id = $1`, older).Scan(&n))
+	assert.Equal(t, 1, n)
 }

@@ -16,15 +16,23 @@ import (
 
 	"github.com/kaanxsrd/hookline/packages/gocommon/blob"
 	"github.com/kaanxsrd/hookline/packages/gocommon/dbq"
+	"github.com/kaanxsrd/hookline/packages/gocommon/entitlements"
 	"github.com/kaanxsrd/hookline/packages/gocommon/jobs"
 )
 
-// Deps are shared by every maintenance worker. Blobs may be nil.
+// UsageChecker reacts to fresh usage numbers (notification emails).
+type UsageChecker interface {
+	CheckUsage(ctx context.Context) error
+}
+
+// Deps are shared by every maintenance worker. Blobs and Usage may be nil.
 type Deps struct {
-	Queries *dbq.Queries
-	Blobs   blob.Store
-	Logger  *slog.Logger
-	Now     func() time.Time
+	Queries      *dbq.Queries
+	Blobs        blob.Store
+	Usage        UsageChecker
+	PlanOverride entitlements.Plan
+	Logger       *slog.Logger
+	Now          func() time.Time
 }
 
 func maintenanceOpts() river.InsertOpts {
@@ -125,7 +133,13 @@ func (w *retentionWorker) Work(ctx context.Context, _ *river.Job[retentionArgs])
 	now := w.d.Now()
 	var removed int64
 	for _, ep := range endpoints {
-		cutoff := now.Add(-time.Duration(ep.RetentionHours) * time.Hour)
+		// The plan in force caps retention, e.g. after a downgrade.
+		hours := int64(ep.RetentionHours)
+		plan := entitlements.Resolve(w.d.PlanOverride, ep.OrgID != nil, (*string)(ep.Plan), (*string)(ep.PlanOverride))
+		if limit := entitlements.For(plan).RetentionHours; limit != entitlements.Unlimited && limit < hours {
+			hours = limit
+		}
+		cutoff := now.Add(-time.Duration(hours) * time.Hour)
 		for {
 			keys, err := w.d.Queries.ListExpiredStoredBodies(ctx, dbq.ListExpiredStoredBodiesParams{EndpointID: ep.ID, Cutoff: cutoff})
 			if err != nil {
@@ -189,7 +203,13 @@ type rollupWorker struct {
 
 func (w *rollupWorker) Work(ctx context.Context, _ *river.Job[usageRollupArgs]) error {
 	// Yesterday too, so the last hour of a day is never missed.
-	return w.d.Queries.RollupUsage(ctx, day(w.d.Now()).AddDate(0, 0, -1))
+	if err := w.d.Queries.RollupUsage(ctx, day(w.d.Now()).AddDate(0, 0, -1)); err != nil {
+		return err
+	}
+	if w.d.Usage == nil {
+		return nil
+	}
+	return w.d.Usage.CheckUsage(ctx)
 }
 
 type idempotencyWorker struct {

@@ -5,7 +5,11 @@ WHERE org_id IS NULL AND expires_at < now() - interval '1 hour'
 RETURNING id;
 
 -- name: ListEndpointRetention :many
-SELECT id, retention_hours FROM endpoint;
+-- With the owner's plan, so retention is capped by the plan in force even
+-- when an endpoint was configured under a bigger plan.
+SELECT e.id, e.retention_hours, e.org_id, s.plan, s.plan_override
+FROM endpoint e
+LEFT JOIN subscription s ON s.org_id = e.org_id;
 
 -- name: ListExpiredStoredBodies :many
 SELECT body_s3_key::text AS key

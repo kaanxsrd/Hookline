@@ -104,6 +104,20 @@ export const SEED_ENDPOINTS: EndpointSeed[] = [
     requests: 12,
     fixture: genericFixture,
   },
+  {
+    // Hookline captures its own billing webhooks in development: point a
+    // Stripe test-mode webhook at this endpoint and run
+    // `hookline listen hooklineBill --forward http://localhost:3000/api/stripe/webhook`.
+    slug: "hooklineBill",
+    name: "Hookline billing (dev)",
+    description:
+      "This instance's own Stripe webhooks, forwarded to /api/stripe/webhook with the CLI.",
+    responseStatus: 200,
+    responseHeaders: jsonHeaders,
+    responseBody: '{"received":true}',
+    requests: 0,
+    fixture: stripeFixture,
+  },
 ];
 
 export type SeedSummary = {
@@ -217,7 +231,7 @@ export async function seed(db: Db, options: SeedOptions): Promise<SeedSummary> {
         const receivedAt = new Date(now.getTime() - rng.int(5 * 60_000, 72 * HOUR));
         return toRequestRow(spec.fixture(rng, receivedAt), receivedAt, ep.id, orgId.id, spec, rng);
       }).sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime());
-      await tx.insert(request).values(rows);
+      if (rows.length > 0) await tx.insert(request).values(rows);
       summary.requestsCreated += rows.length;
 
       if (spec.destination) {

@@ -229,10 +229,13 @@ test("keys are rate limited and can be revoked", async ({ page, request }) => {
   const key = await createKey(page, orgSlug, "Busy", ["endpoints:read"]);
   const headers = { Authorization: `Bearer ${key}` };
 
+  // Concurrent bursts drain the bucket faster than it refills, even on a busy machine.
   let limited = null;
-  for (let i = 0; i < 160 && !limited; i++) {
-    const res = await request.get("/api/v1/me", { headers });
-    if (res.status() === 429) limited = res;
+  for (let round = 0; round < 5 && !limited; round++) {
+    const answers = await Promise.all(
+      Array.from({ length: 150 }, () => request.get("/api/v1/me", { headers })),
+    );
+    limited = answers.find((r) => r.status() === 429) ?? null;
   }
   if (!limited) throw new Error("the bucket never emptied");
   expect(limited.headers()["retry-after"]).toBeTruthy();

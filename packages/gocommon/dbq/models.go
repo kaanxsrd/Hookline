@@ -765,6 +765,13 @@ type Member struct {
 	CreatedAt      time.Time
 }
 
+type NotificationLog struct {
+	ID     uuid.UUID
+	Key    string
+	OrgID  *uuid.UUID
+	SentAt time.Time
+}
+
 type Organization struct {
 	ID        uuid.UUID
 	Name      string

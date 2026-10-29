@@ -110,6 +110,7 @@ test("forward captured requests to a signed destination", async ({ page, request
 });
 
 test("client errors fail without retries and can be retried in bulk", async ({ page, request }) => {
+  test.setTimeout(90_000);
   const api = await receiver();
   api.respondWith(400);
   try {

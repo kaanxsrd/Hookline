@@ -57,3 +57,26 @@ export async function monthUsage(db: Db, orgId: string, now = new Date()) {
     endpoints: { used: endpoints?.n ?? 0, limit: limits.endpoints },
   };
 }
+
+/** Requests per day this month, oldest first, today counted live. */
+export async function dailyRequests(db: Db, orgId: string, now = new Date()) {
+  const { start } = currentPeriod(now);
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const u = schema.usageDaily;
+  const r = schema.request;
+  const rows = await db
+    .select({ day: u.day, requests: u.requests })
+    .from(u)
+    .where(and(eq(u.orgId, orgId), gte(u.day, day(start)), lt(u.day, day(today))));
+  const [live] = await db
+    .select({ n: count() })
+    .from(r)
+    .where(and(eq(r.orgId, orgId), gte(r.receivedAt, today)));
+  const byDay = new Map(rows.map((x) => [String(x.day), Number(x.requests)]));
+  const out: { day: string; requests: number }[] = [];
+  for (let d = new Date(start); d <= today; d = new Date(d.getTime() + 86_400_000)) {
+    const key = day(d);
+    out.push({ day: key, requests: key === day(today) ? (live?.n ?? 0) : (byDay.get(key) ?? 0) });
+  }
+  return out;
+}

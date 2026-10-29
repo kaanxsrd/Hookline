@@ -22,12 +22,14 @@ import (
 	"github.com/kaanxsrd/hookline/packages/gocommon/httpx"
 	"github.com/kaanxsrd/hookline/packages/gocommon/jobs"
 	"github.com/kaanxsrd/hookline/packages/gocommon/logging"
+	"github.com/kaanxsrd/hookline/packages/gocommon/mail"
 	"github.com/kaanxsrd/hookline/packages/gocommon/redisx"
 	"github.com/kaanxsrd/hookline/packages/gocommon/safehttp"
 	"github.com/kaanxsrd/hookline/services/worker/internal/config"
 	"github.com/kaanxsrd/hookline/services/worker/internal/deliver"
 	"github.com/kaanxsrd/hookline/services/worker/internal/health"
 	"github.com/kaanxsrd/hookline/services/worker/internal/maintenance"
+	"github.com/kaanxsrd/hookline/services/worker/internal/notify"
 )
 
 func main() {
@@ -83,7 +85,21 @@ func run() error {
 		Now:       time.Now,
 		Rand:      rand.Float64,
 	})
-	maintenance.Register(workers, &maintenance.Deps{Queries: queries, Blobs: blobs, Logger: logger, Now: time.Now})
+	var sender mail.Sender = mail.Discard{}
+	if cfg.SMTPURL != "" {
+		if sender, err = mail.NewSMTP(cfg.SMTPURL, cfg.MailFrom); err != nil {
+			return err
+		}
+	} else {
+		logger.WarnContext(ctx, "SMTP_URL is not set; notification emails are disabled")
+	}
+	notifications := &notify.Deps{
+		Queries: queries, Mail: sender, AppURL: cfg.AppURL, PlanOverride: cfg.PlanOverride, Logger: logger, Now: time.Now,
+	}
+	notify.Register(workers, notifications)
+	maintenance.Register(workers, &maintenance.Deps{
+		Queries: queries, Blobs: blobs, Usage: notifications, PlanOverride: cfg.PlanOverride, Logger: logger, Now: time.Now,
+	})
 
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Logger: logger,

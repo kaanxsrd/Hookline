@@ -173,3 +173,22 @@ export const idempotencyKey = pgTable(
     index("idempotency_key_expires_at_idx").on(t.expiresAt),
   ],
 );
+
+/**
+ * Notifications already sent, keyed so each is sent at most once per window:
+ * "delivery_failing:{destinationId}" (re-sent after an hour) or
+ * "usage:{orgId}:{yyyy-mm}:{80|100}" (once per month).
+ */
+export const notificationLog = pgTable(
+  "notification_log",
+  {
+    id: id(),
+    key: text("key").notNull(),
+    orgId: uuid("org_id").references(() => organization.id, { onDelete: "cascade" }),
+    sentAt: tstz("sent_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("notification_log_key_idx").on(t.key),
+    index("notification_log_sent_at_idx").on(t.sentAt),
+  ],
+);

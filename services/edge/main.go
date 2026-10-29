@@ -32,6 +32,7 @@ import (
 	"github.com/kaanxsrd/hookline/services/edge/internal/live"
 	"github.com/kaanxsrd/hookline/services/edge/internal/metrics"
 	"github.com/kaanxsrd/hookline/services/edge/internal/pubsub"
+	"github.com/kaanxsrd/hookline/services/edge/internal/quota"
 	"github.com/kaanxsrd/hookline/services/edge/internal/ratelimit"
 	"github.com/kaanxsrd/hookline/services/edge/internal/server"
 	"github.com/kaanxsrd/hookline/services/edge/internal/stream"
@@ -120,6 +121,7 @@ func run() error {
 		Blobs:     blobs,
 		Publisher: live.NewPublisher(rdb),
 		Tunnels:   &tunnel.Relay{RDB: rdb, Responses: responseHub},
+		Quota:     &quota.Quota{RDB: rdb, Queries: queries, Now: time.Now},
 		Counters:  ctrs,
 		IPs:       clientip.New(cfg.TrustedProxies),
 		Secrets:   cfg.Secrets,

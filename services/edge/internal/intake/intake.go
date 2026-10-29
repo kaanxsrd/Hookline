@@ -43,6 +43,7 @@ import (
 	"github.com/kaanxsrd/hookline/services/edge/internal/endpoints"
 	"github.com/kaanxsrd/hookline/services/edge/internal/live"
 	"github.com/kaanxsrd/hookline/services/edge/internal/metrics"
+	"github.com/kaanxsrd/hookline/services/edge/internal/quota"
 	"github.com/kaanxsrd/hookline/services/edge/internal/ratelimit"
 	"github.com/kaanxsrd/hookline/services/edge/internal/tunnel"
 )
@@ -73,8 +74,10 @@ type Deps struct {
 	Blobs     blob.Store
 	Publisher *live.Publisher
 	Tunnels   TunnelRelay
-	Counters  *counters.Counters
-	IPs       *clientip.Resolver
+	// Quota enforces the plan's monthly requests per organization.
+	Quota    *quota.Quota
+	Counters *counters.Counters
+	IPs      *clientip.Resolver
 	// Secrets decrypts endpoint signature secrets; nil leaves every request unchecked.
 	Secrets *secretbox.Box
 	Metrics *metrics.Metrics
@@ -153,6 +156,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				msg = "Too many requests from your address. Slow down and retry."
 			}
 			h.reject(w, start, http.StatusTooManyRequests, "rate_limited", msg)
+			return
+		}
+	}
+
+	monthly := !ep.Anonymous() && h.Quota != nil && ep.Limits.RequestsPerMonth != entitlements.Unlimited
+	if monthly {
+		ok, err := h.Quota.Allow(ctx, *ep.OrgID, ep.Limits.RequestsPerMonth)
+		if err != nil {
+			h.degrade(ctx, "redis", "quota", err)
+		}
+		if !ok {
+			h.reject(w, start, http.StatusTooManyRequests, "quota_exceeded", fmt.Sprintf(
+				"This endpoint's organization has used all %d requests its %s plan includes this month.",
+				ep.Limits.RequestsPerMonth, ep.Limits.Name))
 			return
 		}
 	}
@@ -250,6 +267,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if h.Counters != nil {
 		h.Counters.Add(ep.ID, receivedAt)
+	}
+	if monthly {
+		if err := h.Quota.Add(ctx, *ep.OrgID); err != nil {
+			h.degrade(ctx, "redis", "quota", err)
+		}
 	}
 	h.publish(ctx, ep, params, ip.String(), deliveries)
 	h.Metrics.IntakeBytes.Add(float64(len(body)))

@@ -4,6 +4,7 @@
  *   - Go query layer (sqlc, from packages/db/migrations + packages/gocommon/dbq/queries)
  *   - API types for TypeScript (openapi-typescript) and Go (oapi-codegen), and the
  *     OpenAPI document as a module, all from api/openapi.yaml
+ *   - the worker's email templates (Go templates rendered from apps/web/emails)
  *
  * sqlc runs from its official Docker image because its PostgreSQL parser needs
  * cgo, which is not available everywhere (notably Windows). CI runs this and
@@ -91,6 +92,7 @@ try {
   await entitlements();
   await sqlc();
   await openapi();
+  await run(["bun", "apps/web/scripts/render-mail-templates.tsx"]);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);

@@ -36,6 +36,10 @@ const schema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
+  /** Stripe billing; unset disables billing (self-hosted instances usually leave it off). */
+  STRIPE_SECRET_KEY: z.string().optional(),
+  /** Verifies Stripe webhooks at /api/stripe/webhook. */
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
   /** Signs SSE stream tokens; the edge verifies them with the same secret. */
   STREAM_TOKEN_SECRET: z.string().min(32),
   /** Addresses exempt from the anonymous-endpoint daily cap (development and tests only). */

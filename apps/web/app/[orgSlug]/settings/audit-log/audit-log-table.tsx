@@ -27,10 +27,27 @@ export function AuditLogTable({ orgSlug }: { orgSlug: string }) {
     ),
   );
   const items = query.data?.pages.flatMap((p) => p.items) ?? [];
+  const days = query.data?.pages[0]?.days;
   const exportUrl = `/api/orgs/${orgSlug}/audit-log${deferred ? `?action=${encodeURIComponent(deferred)}` : ""}`;
+
+  if (days === 0) {
+    return (
+      <div className="rounded-lg border border-dashed p-10 text-center text-sm">
+        <p className="font-medium">The audit log is not included in your plan.</p>
+        <p className="text-muted-foreground mt-1">
+          Upgrade to Pro or Team to see who changed what, with CSV export.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4">
+      {typeof days === "number" && (
+        <p className="text-muted-foreground text-xs">
+          Entries from the last {days} days, as your plan includes.
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative w-full max-w-xs">
           <Search

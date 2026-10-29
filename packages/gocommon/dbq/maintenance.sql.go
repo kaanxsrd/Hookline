@@ -117,14 +117,21 @@ func (q *Queries) ExpireAnonymousEndpoints(ctx context.Context) ([]uuid.UUID, er
 }
 
 const listEndpointRetention = `-- name: ListEndpointRetention :many
-SELECT id, retention_hours FROM endpoint
+SELECT e.id, e.retention_hours, e.org_id, s.plan, s.plan_override
+FROM endpoint e
+LEFT JOIN subscription s ON s.org_id = e.org_id
 `
 
 type ListEndpointRetentionRow struct {
 	ID             uuid.UUID
 	RetentionHours int32
+	OrgID          *uuid.UUID
+	Plan           *Plan
+	PlanOverride   *Plan
 }
 
+// With the owner's plan, so retention is capped by the plan in force even
+// when an endpoint was configured under a bigger plan.
 func (q *Queries) ListEndpointRetention(ctx context.Context) ([]ListEndpointRetentionRow, error) {
 	rows, err := q.db.Query(ctx, listEndpointRetention)
 	if err != nil {
@@ -134,7 +141,13 @@ func (q *Queries) ListEndpointRetention(ctx context.Context) ([]ListEndpointRete
 	items := []ListEndpointRetentionRow{}
 	for rows.Next() {
 		var i ListEndpointRetentionRow
-		if err := rows.Scan(&i.ID, &i.RetentionHours); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.RetentionHours,
+			&i.OrgID,
+			&i.Plan,
+			&i.PlanOverride,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

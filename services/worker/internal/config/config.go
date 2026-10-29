@@ -6,7 +6,9 @@ import (
 
 	"github.com/kaanxsrd/hookline/packages/gocommon/blob"
 	"github.com/kaanxsrd/hookline/packages/gocommon/config"
+	"github.com/kaanxsrd/hookline/packages/gocommon/entitlements"
 	"github.com/kaanxsrd/hookline/packages/gocommon/logging"
+	"github.com/kaanxsrd/hookline/packages/gocommon/mail"
 	"github.com/kaanxsrd/hookline/packages/gocommon/secretbox"
 )
 
@@ -28,6 +30,11 @@ type Config struct {
 
 	DeliveryConcurrency int  // WORKER_DELIVERY_CONCURRENCY: deliveries in flight per process
 	AllowPrivate        bool // ALLOW_PRIVATE_DESTINATIONS: permit loopback/private destinations (self-hosted only)
+
+	SMTPURL      string            // SMTP_URL: notification emails; empty disables them
+	MailFrom     string            // MAIL_FROM
+	AppURL       string            // APP_URL: links in emails
+	PlanOverride entitlements.Plan // PLAN_OVERRIDE: "unlimited" on self-hosted instances
 }
 
 // S3Enabled reports whether object storage is configured.
@@ -52,6 +59,15 @@ func Load(l *config.Loader) (Config, error) {
 		},
 		DeliveryConcurrency: l.Int("WORKER_DELIVERY_CONCURRENCY", 50, 1, 1000),
 		AllowPrivate:        l.Bool("ALLOW_PRIVATE_DESTINATIONS", false),
+		SMTPURL:             l.String("SMTP_URL", ""),
+		MailFrom:            l.String("MAIL_FROM", "Hookline <no-reply@hookline.localhost>"),
+		AppURL:              l.String("APP_URL", "http://localhost:3000"),
+		PlanOverride:        entitlements.Plan(l.OneOf("PLAN_OVERRIDE", "", "", string(entitlements.PlanUnlimited))),
+	}
+	if c.SMTPURL != "" {
+		if _, err := mail.NewSMTP(c.SMTPURL, c.MailFrom); err != nil {
+			l.Fail("SMTP_URL", "%v", err)
+		}
 	}
 	if spec := l.RequiredString("DATA_ENCRYPTION_KEY"); spec != "" {
 		box, err := secretbox.Parse(spec)

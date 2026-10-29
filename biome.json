@@ -12,7 +12,8 @@
       "!**/bun.lock",
       "!**/.tools",
       "!**/tmp",
-      "!**/migrations/meta"
+      "!**/migrations/meta",
+      "!**/mail/templates"
     ]
   },
   "formatter": {
@@ -68,7 +69,7 @@
   },
   "overrides": [
     {
-      "includes": ["scripts/**", "packages/*/scripts/**"],
+      "includes": ["scripts/**", "packages/*/scripts/**", "apps/*/scripts/**"],
       "linter": {
         "rules": {
           "suspicious": {

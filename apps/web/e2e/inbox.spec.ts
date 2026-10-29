@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { hydrated, signUpWithOrg } from "./helpers";
+import { hydrated, setOrgPlan, signUpWithOrg } from "./helpers";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
@@ -92,6 +92,8 @@ test("filter, search, inspect, reveal, copy, download and delete requests", asyn
     .click();
   await expect(count).toHaveText("2 requests");
 
+  // The audit log is a paid feature.
+  await setOrgPlan(orgSlug, "pro");
   await page.goto(`/${orgSlug}/settings/audit-log`);
   await expect(page.getByText("request.headers_revealed")).toBeVisible();
   await expect(page.getByText("request.delete")).toBeVisible();

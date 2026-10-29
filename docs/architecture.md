@@ -95,6 +95,10 @@ The CLI signs in with the device flow (RFC 8628): it shows a code, the user appr
 
 `/api/v1` is served by Next.js route handlers and specified by `api/openapi.yaml`, from which `bun run gen` generates TypeScript types, the JSON document served at `/api/v1/openapi.json` (rendered by Scalar at `/docs/api`) and the CLI's Go models. Every authenticated handler goes through one wrapper (`apps/web/lib/api/route.ts`) that checks the bearer key and its scope, takes a token from the key's Redis bucket (sending `RateLimit-*` headers), applies `Idempotency-Key` to POSTs (claim in `idempotency_key`, replay the stored answer for 24 hours) and turns thrown errors into the single error shape. Business rules (plan limits, URL checks, sealing secrets) live in `apps/web/lib` and are shared with the tRPC routers, so the dashboard and the API cannot drift. Contract tests check both directions: each documented operation has a handler, and every answer validates against its schema.
 
+## Plans and billing
+
+Plans live in `config/plans.json` and are generated into Go and TypeScript entitlement modules; each limit is enforced where its action happens (the table is in [deployment.md](deployment.md#plan-limits)). Usage is rolled up hourly by the worker into `usage_daily`; the edge keeps a live monthly request counter per organization in Redis for the quota. Stripe is optional: subscription webhooks set an organization's plan, and a plan change caps retention, refreshes the edge's cached limits and notifies owners and admins. The worker's emails share React Email templates with the web app through generated Go templates.
+
 ## Signatures and replay
 
 - **Verification** happens at capture: the edge decrypts the endpoint's secret and runs the provider's scheme (`packages/gocommon/signatures`), storing `verified` or `invalid` on the request. Requests are never rejected for a bad signature; the sender always gets the configured response. The web app has a TypeScript twin (`apps/web/lib/signatures.ts`) for "test against the last request"; both are tested against one vector file.

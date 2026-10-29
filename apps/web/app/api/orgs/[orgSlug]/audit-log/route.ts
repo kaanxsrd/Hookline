@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { orgPlan } from "@/lib/plans";
 import { appRouter } from "@/server/routers/_app";
 import { listAudit } from "@/server/routers/audit";
 import { createContext } from "@/server/trpc/context";
@@ -51,13 +52,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ orgS
     ),
   ];
   let cursor: string | undefined;
+  const { limits } = await orgPlan(ctx.db, org.id);
   // At most 100k rows per export.
   for (let page = 0; page < 200; page++) {
-    const { items, nextCursor } = await listAudit(ctx.db, org.id, {
-      limit: 500,
-      ...(action ? { action } : {}),
-      ...(cursor ? { cursor } : {}),
-    });
+    const { items, nextCursor } = await listAudit(
+      ctx.db,
+      org.id,
+      {
+        limit: 500,
+        ...(action ? { action } : {}),
+        ...(cursor ? { cursor } : {}),
+      },
+      limits.audit_log_days,
+    );
     for (const e of items) {
       lines.push(
         [

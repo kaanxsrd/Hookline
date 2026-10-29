@@ -20,7 +20,10 @@ export default async function SettingsLayout({
       ? [{ href: `/${orgSlug}/settings/api-keys`, label: "API keys" }]
       : []),
     ...(hasRole(org.role, "admin")
-      ? [{ href: `/${orgSlug}/settings/audit-log`, label: "Audit log" }]
+      ? [
+          { href: `/${orgSlug}/settings/billing`, label: "Billing" },
+          { href: `/${orgSlug}/settings/audit-log`, label: "Audit log" },
+        ]
       : []),
   ];
   return (

@@ -34,6 +34,7 @@ import (
 	"github.com/kaanxsrd/hookline/services/edge/internal/intake"
 	"github.com/kaanxsrd/hookline/services/edge/internal/live"
 	"github.com/kaanxsrd/hookline/services/edge/internal/metrics"
+	"github.com/kaanxsrd/hookline/services/edge/internal/quota"
 	"github.com/kaanxsrd/hookline/services/edge/internal/ratelimit"
 	"github.com/kaanxsrd/hookline/services/edge/internal/server"
 )
@@ -77,6 +78,7 @@ func newEnv(t *testing.T) *env {
 		Counters:  e.counters,
 		IPs:       clientip.New(trusted),
 		Secrets:   testSecrets,
+		Quota:     &quota.Quota{RDB: rdb, Queries: q, Now: func() time.Time { return quotaNow }},
 		Metrics:   e.metrics,
 		Logger:    logging.Discard(),
 	})
@@ -545,4 +547,50 @@ func TestSignaturesAreVerifiedAtCapture(t *testing.T) {
 	require.NoError(t, err)
 	e.mr.Del(endpoints.CacheKey("abcdefABCDEF"))
 	assert.Equal(t, "unchecked", status("sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17"))
+}
+
+// quotaNow pins the quota's month so seeded usage rows fall inside it.
+var quotaNow = time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+
+func TestMonthlyQuota(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t) // free plan: 5,000 requests a month
+	e.endpoint(endpointOpts{})
+	key := "quota:req:" + e.orgID.String() + ":2026-10"
+
+	require.NoError(t, e.mr.Set(key, "4999"))
+	w := e.send("POST", "/h/abcdefABCDEF", strings.NewReader("{}"), nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	got, err := e.mr.Get(key)
+	require.NoError(t, err)
+	assert.Equal(t, "5000", got, "captured requests are counted")
+
+	w = e.send("POST", "/h/abcdefABCDEF", strings.NewReader("{}"), nil)
+	assert.Equal(t, http.StatusTooManyRequests, w.Code)
+	assert.Equal(t, "quota_exceeded", errorCode(t, w))
+	assert.Contains(t, w.Body.String(), "5000 requests its Free plan")
+}
+
+func TestMonthlyQuotaIsSeededFromTheDatabase(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.endpoint(endpointOpts{})
+	_, err := e.pool.Exec(t.Context(), `INSERT INTO usage_daily (org_id, day, requests) VALUES ($1, '2026-10-05', 5000)`, e.orgID)
+	require.NoError(t, err)
+
+	w := e.send("POST", "/h/abcdefABCDEF", strings.NewReader("{}"), nil)
+	assert.Equal(t, http.StatusTooManyRequests, w.Code)
+	got, err := e.mr.Get("quota:req:" + e.orgID.String() + ":2026-10")
+	require.NoError(t, err)
+	assert.Equal(t, "5000", got)
+}
+
+func TestMonthlyQuotaFailsOpen(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.endpoint(endpointOpts{})
+	e.mr.Close()
+	w := e.send("POST", "/h/abcdefABCDEF", strings.NewReader("{}"), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Positive(t, testutil.ToFloat64(e.metrics.Degraded.WithLabelValues("redis", "quota")))
 }

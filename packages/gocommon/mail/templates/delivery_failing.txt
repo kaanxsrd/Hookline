@@ -1,0 +1,16 @@
+{{/* Code generated from apps/web/emails by `bun run gen`. DO NOT EDIT. */}}Hookline
+
+Hookline gave up delivering a request from {{.EndpointName}} to {{.DestinationName}} ({{.DestinationURL}}) in {{.OrgName}} after every retry.
+
+Last result: {{.LastResult}}
+
+Review failed deliveries {{.URL}}
+
+Or paste this link into your browser:
+{{.URL}}
+
+You can retry them once the destination is back. We send at most one of these an hour per destination.
+
+----------------------------------------
+
+Hookline: catch every webhook, replay anything, pipe it to localhost.

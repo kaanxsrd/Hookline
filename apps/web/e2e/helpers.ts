@@ -114,3 +114,18 @@ export async function signUpWithOrg(page: Page, request: APIRequestContext, orgN
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return { email, orgSlug: slug, orgName: name };
 }
+
+/** An organization's ID, read from the database. */
+export async function orgIdOf(orgSlug: string): Promise<string> {
+  const sql = postgres(
+    process.env.DATABASE_URL ?? "postgres://hookline:hookline@localhost:5433/hookline",
+    { max: 1 },
+  );
+  try {
+    const [row] = await sql<{ id: string }[]>`SELECT id FROM organization WHERE slug = ${orgSlug}`;
+    if (!row) throw new Error(`no organization ${orgSlug}`);
+    return row.id;
+  } finally {
+    await sql.end();
+  }
+}

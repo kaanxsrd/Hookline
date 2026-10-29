@@ -31,6 +31,7 @@ import (
 	"github.com/kaanxsrd/hookline/packages/gocommon/jobs"
 	"github.com/kaanxsrd/hookline/packages/gocommon/safehttp"
 	"github.com/kaanxsrd/hookline/packages/gocommon/secretbox"
+	"github.com/kaanxsrd/hookline/services/worker/internal/notify"
 )
 
 // Publisher announces delivery status changes on an endpoint's live stream.
@@ -126,7 +127,30 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[jobs.DeliverArgs]) err
 		w.publish(ctx, d, dbq.DeliveryStatusPending)
 		return river.JobSnooze(delay)
 	default:
-		return w.finish(ctx, d, dbq.DeliveryStatusFailed, attemptNo, outcome.record.StatusCode)
+		if err := w.finish(ctx, d, dbq.DeliveryStatusFailed, attemptNo, outcome.record.StatusCode); err != nil {
+			return err
+		}
+		w.notifyFailing(ctx, d, outcome)
+		return nil
+	}
+}
+
+// notifyFailing queues the "deliveries are failing" email; the notification
+// job debounces it per destination.
+func (w *Worker) notifyFailing(ctx context.Context, d dbq.GetDeliveryWorkRow, o outcome) {
+	client, err := river.ClientFromContextSafely[pgx.Tx](ctx)
+	if err != nil {
+		return // run outside River (tests)
+	}
+	last := "no response"
+	switch {
+	case o.record.Error != nil:
+		last = *o.record.Error
+	case o.record.StatusCode != nil:
+		last = "HTTP " + strconv.Itoa(int(*o.record.StatusCode))
+	}
+	if _, err := client.Insert(ctx, notify.DeliveryFailingArgs{DestinationID: d.DestinationID, LastResult: last}, nil); err != nil {
+		w.Logger.WarnContext(ctx, "queue failing-destination notification", "error", err)
 	}
 }
 

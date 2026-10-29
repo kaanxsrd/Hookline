@@ -50,6 +50,13 @@
       "when": 1793277719605,
       "tag": "0006_replay_overrides",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793280917289,
+      "tag": "0007_notification_log",
+      "breakpoints": true
     }
   ]
 }
