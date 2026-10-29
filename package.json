@@ -10,6 +10,7 @@
   },
   "workspaces": [
     "apps/web",
+    "packages/db",
     "services/edge",
     "services/worker",
     "cli",
@@ -24,6 +25,11 @@
     "format": "biome format --write .",
     "check": "biome check . && tsc -p scripts --noEmit && bun test scripts && turbo run typecheck lint test",
     "check:fix": "biome check --write .",
+    "gen": "bun scripts/gen.ts",
+    "db:generate": "bun run --cwd packages/db db:generate",
+    "db:migrate": "bun packages/db/scripts/migrate.ts",
+    "db:seed": "bun packages/db/scripts/seed.ts",
+    "db:studio": "bun run --cwd packages/db db:studio",
     "setup:go": "bun scripts/go.ts setup"
   },
   "devDependencies": {

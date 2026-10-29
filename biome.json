@@ -1,8 +1,19 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
-    "includes": ["**", "!**/next-env.d.ts", "!**/bun.lock", "!**/.tools", "!**/tmp"]
+    "includes": [
+      "**",
+      "!**/next-env.d.ts",
+      "!**/bun.lock",
+      "!**/.tools",
+      "!**/tmp",
+      "!**/migrations/meta"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -11,13 +22,23 @@
     "lineWidth": 100
   },
   "javascript": {
-    "formatter": { "quoteStyle": "double", "trailingCommas": "all", "semicolons": "always" }
+    "formatter": {
+      "quoteStyle": "double",
+      "trailingCommas": "all",
+      "semicolons": "always"
+    }
   },
   "css": {
-    "parser": { "tailwindDirectives": true }
+    "parser": {
+      "tailwindDirectives": true
+    }
   },
   "assist": {
-    "actions": { "source": { "organizeImports": "on" } }
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
   },
   "linter": {
     "enabled": true,
@@ -30,17 +51,31 @@
       "preset": "recommended",
       "suspicious": {
         "noExplicitAny": "error",
-        "noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } }
+        "noConsole": {
+          "level": "error",
+          "options": {
+            "allow": ["warn", "error"]
+          }
+        }
       },
       "nursery": {
-        "useTailwindSortedClasses": { "level": "warn", "fix": "safe" }
+        "useTailwindSortedClasses": {
+          "level": "warn",
+          "fix": "safe"
+        }
       }
     }
   },
   "overrides": [
     {
-      "includes": ["scripts/**"],
-      "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
+      "includes": ["scripts/**", "packages/*/scripts/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
     }
   ]
 }

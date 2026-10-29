@@ -17,6 +17,8 @@
     "typecheck": {
       "dependsOn": ["^typecheck"]
     },
-    "test": {}
+    "test": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/db/migrations/**"]
+    }
   }
 }

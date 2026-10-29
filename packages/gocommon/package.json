@@ -7,5 +7,8 @@
   "scripts": {
     "lint": "bun ../../scripts/go.ts lint",
     "test": "bun ../../scripts/go.ts test"
+  },
+  "dependencies": {
+    "@hookline/db": "workspace:*"
   }
 }

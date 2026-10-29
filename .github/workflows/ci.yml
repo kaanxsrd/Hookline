@@ -17,6 +17,22 @@ jobs:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # TypeScript database tests use this server; Go tests start their own
+    # PostgreSQL through testcontainers.
+    services:
+      postgres:
+        image: postgres:17.11-alpine
+        env:
+          POSTGRES_USER: hookline
+          POSTGRES_PASSWORD: hookline
+          POSTGRES_DB: hookline
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U hookline -d hookline"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      DATABASE_URL: postgres://hookline:hookline@localhost:5433/hookline
     steps:
       - uses: actions/checkout@v7
 
@@ -49,5 +65,16 @@ jobs:
 
       - run: bun run build
 
+      - name: Regenerate derived code (sqlc) and check the Drizzle snapshot
+        run: |
+          bun run gen
+          bun run db:generate
+
       - name: Generated files are committed
-        run: git diff --exit-code
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Generated files are out of date. Run 'bun run gen' and 'bun run db:generate' and commit the result."
+            git status --porcelain
+            git diff
+            exit 1
+          fi

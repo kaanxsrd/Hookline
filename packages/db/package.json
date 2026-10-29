@@ -1,0 +1,28 @@
+{
+  "name": "@hookline/db",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Hookline database schema (Drizzle), migrations and seed data.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts"
+  },
+  "scripts": {
+    "db:generate": "bun --bun drizzle-kit generate",
+    "db:studio": "bun --bun drizzle-kit studio",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "better-auth": "1.7.14",
+    "drizzle-orm": "0.45.4",
+    "postgres": "3.4.9"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "drizzle-kit": "0.31.11",
+    "typescript": "6.0.3"
+  }
+}

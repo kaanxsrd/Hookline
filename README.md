@@ -14,6 +14,8 @@ Requirements: [Bun](https://bun.sh) 1.3+, [Go](https://go.dev/dl/) 1.27+ and Doc
 cp .env.example .env
 docker compose up -d     # Postgres, Redis, MinIO (+ bucket), Mailpit
 bun install
+bun run db:migrate
+bun run db:seed          # demo org; sign in as admin@hookline.local / hookline-dev-password
 bun run dev              # web :3000, edge :8080, worker :8081
 ```
 
@@ -29,12 +31,17 @@ The first `bun run dev` or `bun run check` also builds the pinned Go tools (air,
 
 ## Scripts
 
-| Command             | What it does                                         |
-| ------------------- | ---------------------------------------------------- |
-| `bun run dev`       | Runs every service with hot reload (Next.js and air) |
-| `bun run check`     | Biome, tsc, golangci-lint and all tests              |
-| `bun run build`     | Production build                                     |
-| `bun run check:fix` | Applies Biome fixes                                  |
+| Command               | What it does                                         |
+| --------------------- | ---------------------------------------------------- |
+| `bun run dev`         | Runs every service with hot reload (Next.js and air) |
+| `bun run check`       | Biome, tsc, golangci-lint and all tests              |
+| `bun run build`       | Production build                                     |
+| `bun run check:fix`   | Applies Biome fixes                                  |
+| `bun run db:migrate`  | Applies database migrations                          |
+| `bun run db:seed`     | Loads demo data (safe to re-run)                     |
+| `bun run db:generate` | Generates a migration from schema changes            |
+| `bun run db:studio`   | Opens Drizzle Studio                                 |
+| `bun run gen`         | Regenerates derived code (sqlc)                      |
 
 ## Repository layout
 
@@ -43,7 +50,8 @@ apps/web           Next.js: marketing, docs, auth, dashboard, public REST API
 services/edge      Go: webhook intake, SSE streams, CLI tunnels
 services/worker    Go: forwarding, retries, retention, rollups
 cli                Go: the hookline CLI
-packages/gocommon  Go: config, logging, HTTP plumbing shared by the Go services
+packages/db        Drizzle schema, migrations and seed (the only owner of the schema)
+packages/gocommon  Go: config, logging, HTTP plumbing, sqlc queries shared by the Go services
 tools              Pinned Go developer tools (outside go.work)
 scripts            Repository scripts (Bun)
 docs               Architecture, protocol, threat model and status docs
