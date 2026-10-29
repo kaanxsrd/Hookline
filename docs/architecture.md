@@ -85,6 +85,12 @@ In development the web app and the edge are different origins; the stream answer
 - **Claiming a temporary endpoint:** the visitor's httpOnly cookie proves ownership. Claiming moves the endpoint and its captured requests into the organization, removes the expiry and view token, and invalidates the edge's cache.
 - **Content Security Policy** (`apps/web/proxy.ts`): a per-request nonce with `strict-dynamic` for scripts (the theme script carries the nonce); `style-src 'unsafe-inline'`, because component libraries position elements with inline style attributes; `connect-src` adds the edge origin for SSE in development; `frame-ancestors 'none'`. The proxy also redirects requests without a session cookie to sign-in before rendering; pages still verify the session on the server.
 
+## CLI tunnels
+
+`hookline listen` keeps a WebSocket open to the edge's `/v1/tunnel` and forwards each captured request to a local server; `hookline tail` only prints them. The protocol, routing across instances, sync mode and close codes are specified in [tunnel-protocol.md](tunnel-protocol.md). In short: intake publishes every request on `tunnel:ep:{endpointId}`; whichever edge instance holds a tunnel for that endpoint forwards it; in sync mode intake waits on `tunnel:resp:{requestId}` for the first answer and falls back to the static response.
+
+The CLI signs in with the device flow (RFC 8628): it shows a code, the user approves it at `/cli/authorize` and picks an organization, and the CLI receives an API key once. Keys are `hk_live_` plus 43 base62 characters; only their SHA-256 hash and an 8-character prefix are stored. The edge checks keys itself (`services/edge/internal/apikey`); the web app checks them for `/api/v1`.
+
 ## Forwarding
 
 1. **Enqueue.** When intake stores a request it evaluates each enabled destination's filter (`gocommon/destfilter`) and, in the same transaction, inserts a `delivery` row and a River `deliver` job per match. A crash can never leave a request without its deliveries, or a job without its row. Manual retries and tests from the web app insert their rows and jobs in one transaction too, using River's own insert and `LISTEN/NOTIFY` wake-up (`apps/web/lib/jobs.ts`).

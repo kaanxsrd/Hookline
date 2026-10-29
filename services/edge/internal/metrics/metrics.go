@@ -18,6 +18,9 @@ type Metrics struct {
 	Degraded       *prometheus.CounterVec
 	SSEClients     prometheus.Gauge
 	SSEEvents      prometheus.Counter
+	TunnelSessions prometheus.Gauge
+	TunnelFrames   *prometheus.CounterVec
+	TunnelSync     *prometheus.CounterVec
 }
 
 // New registers every collector, plus Go runtime and process metrics, on a
@@ -57,10 +60,22 @@ func New() *Metrics {
 			Namespace: "hookline", Subsystem: "stream", Name: "events_total",
 			Help: "Live events written to SSE clients (excluding pings and replays).",
 		}),
+		TunnelSessions: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "hookline", Subsystem: "tunnel", Name: "sessions",
+			Help: "Open CLI tunnel sessions on this instance.",
+		}),
+		TunnelFrames: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "hookline", Subsystem: "tunnel", Name: "frames_total",
+			Help: "Tunnel frames by direction (in, out) and type.",
+		}, []string{"direction", "type"}),
+		TunnelSync: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "hookline", Subsystem: "tunnel", Name: "sync_responses_total",
+			Help: "Sync-mode intake requests by outcome (answered, no_tunnel, timeout, target_failed, error).",
+		}, []string{"outcome"}),
 	}
 	reg.MustRegister(
 		m.IntakeDuration, m.IntakeBytes, m.IntakeRejects, m.BodiesOffload, m.Degraded,
-		m.SSEClients, m.SSEEvents,
+		m.SSEClients, m.SSEEvents, m.TunnelSessions, m.TunnelFrames, m.TunnelSync,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)

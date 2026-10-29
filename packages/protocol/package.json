@@ -1,0 +1,11 @@
+{
+  "name": "@hookline/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tunnel protocol hookline.v1: message types and constants (Go).",
+  "license": "MIT",
+  "scripts": {
+    "lint": "bun ../../scripts/go.ts lint",
+    "test": "bun ../../scripts/go.ts test"
+  }
+}

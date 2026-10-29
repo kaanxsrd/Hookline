@@ -1,3 +1,5 @@
+// Package stream serves live endpoint events to dashboards over SSE, fed by
+// a pubsub.Hub (one Redis subscription per process).
 package stream
 
 import (
@@ -16,6 +18,7 @@ import (
 	"github.com/kaanxsrd/hookline/packages/gocommon/httpx"
 	"github.com/kaanxsrd/hookline/services/edge/internal/live"
 	"github.com/kaanxsrd/hookline/services/edge/internal/metrics"
+	"github.com/kaanxsrd/hookline/services/edge/internal/pubsub"
 	"github.com/kaanxsrd/hookline/services/edge/internal/streamauth"
 )
 
@@ -38,7 +41,7 @@ const (
 //	resync    more than MaxReplay requests were missed; reload the list
 //	reconnect the edge is shutting down; reconnect (data: retry_ms)
 type Handler struct {
-	Hub          *Hub
+	Hub          *pubsub.Hub
 	Queries      *dbq.Queries
 	Tokens       *streamauth.Verifier
 	AllowOrigin  string // the web app's origin, for cross-origin EventSource in development
@@ -71,7 +74,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	// Subscribe before replaying so nothing published in between is lost;
 	// duplicates are filtered below.
-	sub, err := h.Hub.Subscribe(ctx, endpointID)
+	sub, err := h.Hub.Subscribe(ctx, live.Channel(endpointID))
 	if err != nil {
 		h.Logger.WarnContext(ctx, "live stream unavailable", "error", err)
 		w.Header().Set("Retry-After", "5")
@@ -108,7 +111,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <-ctx.Done():
 			return
 		case <-sub.Done():
-			if sub.Reason() == ReasonShutdown {
+			if sub.Reason() == pubsub.ReasonShutdown {
 				_ = out.event("reconnect", "", []byte(`{"retry_ms":1000}`))
 			}
 			return

@@ -32,6 +32,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Empty(t, c.PlanOverride)
 	assert.NotEmpty(t, c.TrustedProxies)
 	assert.Equal(t, "http://localhost:3000", c.AppOrigin)
+	assert.Equal(t, "http://localhost:8080", c.PublicURL)
 }
 
 func TestLoadValues(t *testing.T) {
@@ -65,9 +66,10 @@ func TestLoadReportsAllErrors(t *testing.T) {
 		"TRUSTED_PROXIES":       "not-an-ip",
 		"STREAM_TOKEN_SECRET":   "short",
 		"APP_URL":               "not a url",
+		"EDGE_PUBLIC_URL":       "ftp://x",
 	})))
 	require.Error(t, err)
-	for _, key := range []string{"EDGE_ADDR", "LOG_LEVEL", "EDGE_SHUTDOWN_TIMEOUT", "DATABASE_URL", "REDIS_URL", "PLAN_OVERRIDE", "TRUSTED_PROXIES", "STREAM_TOKEN_SECRET", "APP_URL"} {
+	for _, key := range []string{"EDGE_ADDR", "LOG_LEVEL", "EDGE_SHUTDOWN_TIMEOUT", "DATABASE_URL", "REDIS_URL", "PLAN_OVERRIDE", "TRUSTED_PROXIES", "STREAM_TOKEN_SECRET", "APP_URL", "EDGE_PUBLIC_URL"} {
 		assert.Contains(t, err.Error(), key)
 	}
 }

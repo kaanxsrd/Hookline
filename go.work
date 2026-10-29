@@ -3,6 +3,7 @@ go 1.27.0
 use (
 	./cli
 	./packages/gocommon
+	./packages/protocol
 	./services/edge
 	./services/worker
 )

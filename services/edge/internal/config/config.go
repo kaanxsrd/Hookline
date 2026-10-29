@@ -4,6 +4,7 @@ package config
 import (
 	"net/netip"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/kaanxsrd/hookline/packages/gocommon/blob"
@@ -28,6 +29,7 @@ type Config struct {
 	// S3 is used for bodies over 64 KiB; with S3_BUCKET unset such bodies are rejected.
 	S3 blob.S3Config // S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_FORCE_PATH_STYLE
 
+	PublicURL         string // EDGE_PUBLIC_URL: public base of intake URLs, shown to CLI tunnels
 	StreamTokenSecret string // STREAM_TOKEN_SECRET: verifies SSE stream tokens minted by the web app
 	AppOrigin         string // origin of APP_URL, allowed to open SSE streams cross-origin
 
@@ -68,6 +70,11 @@ func Load(l *config.Loader) (Config, error) {
 		l.Fail("APP_URL", "must be an absolute URL, got %q", appURL)
 	} else {
 		c.AppOrigin = u.Scheme + "://" + u.Host
+	}
+
+	c.PublicURL = strings.TrimRight(l.String("EDGE_PUBLIC_URL", "http://localhost:8080"), "/")
+	if u, err := url.Parse(c.PublicURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		l.Fail("EDGE_PUBLIC_URL", "must be an absolute http(s) URL, got %q", c.PublicURL)
 	}
 
 	trusted, err := clientip.ParseTrusted(l.String("TRUSTED_PROXIES", clientip.DefaultTrusted))

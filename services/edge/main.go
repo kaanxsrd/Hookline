@@ -24,16 +24,19 @@ import (
 	"github.com/kaanxsrd/hookline/packages/gocommon/httpx"
 	"github.com/kaanxsrd/hookline/packages/gocommon/logging"
 	"github.com/kaanxsrd/hookline/packages/gocommon/redisx"
+	"github.com/kaanxsrd/hookline/services/edge/internal/apikey"
 	"github.com/kaanxsrd/hookline/services/edge/internal/config"
 	"github.com/kaanxsrd/hookline/services/edge/internal/counters"
 	"github.com/kaanxsrd/hookline/services/edge/internal/endpoints"
 	"github.com/kaanxsrd/hookline/services/edge/internal/intake"
 	"github.com/kaanxsrd/hookline/services/edge/internal/live"
 	"github.com/kaanxsrd/hookline/services/edge/internal/metrics"
+	"github.com/kaanxsrd/hookline/services/edge/internal/pubsub"
 	"github.com/kaanxsrd/hookline/services/edge/internal/ratelimit"
 	"github.com/kaanxsrd/hookline/services/edge/internal/server"
 	"github.com/kaanxsrd/hookline/services/edge/internal/stream"
 	"github.com/kaanxsrd/hookline/services/edge/internal/streamauth"
+	"github.com/kaanxsrd/hookline/services/edge/internal/tunnel"
 )
 
 func main() {
@@ -92,6 +95,20 @@ func run() error {
 	}
 
 	m := metrics.New()
+	tunnelHub := pubsub.NewHub(rdb, logger)
+	responseHub := pubsub.NewHub(rdb, logger)
+	tunnels := tunnel.NewServer(tunnel.Deps{
+		Keys:         &apikey.Authenticator{Queries: queries, Logger: logger},
+		Queries:      queries,
+		Blobs:        blobs,
+		RDB:          rdb,
+		Hub:          tunnelHub,
+		Presence:     &tunnel.Presence{RDB: rdb, Now: time.Now},
+		PublicURL:    cfg.PublicURL,
+		PlanOverride: cfg.PlanOverride,
+		Metrics:      m,
+		Logger:       logger,
+	})
 	ctrs := counters.New(queries, logger, time.Second)
 	intakeRules := entitlements.Intake()
 	handler := intake.New(intake.Deps{
@@ -102,6 +119,7 @@ func run() error {
 		Limiter:   ratelimit.New(rdb, ratelimit.Rule{Rate: intakeRules.PerIPRatePerSecond, Burst: intakeRules.PerIPBurst}),
 		Blobs:     blobs,
 		Publisher: live.NewPublisher(rdb),
+		Tunnels:   &tunnel.Relay{RDB: rdb, Responses: responseHub},
 		Counters:  ctrs,
 		IPs:       clientip.New(cfg.TrustedProxies),
 		Metrics:   m,
@@ -112,24 +130,32 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	hub := stream.NewHub(rdb, logger)
+	hub := pubsub.NewHub(rdb, logger)
 	streams := &stream.Handler{
 		Hub: hub, Queries: queries, Tokens: tokens, AllowOrigin: cfg.AppOrigin,
 		Metrics: m, Logger: logger,
 	}
 
-	public := httpx.NewServer(server.New(logger, server.Routes{Intake: handler, Stream: streams, Checks: checks}), logger)
-	// Open streams would otherwise hold a graceful shutdown until its deadline.
+	public := httpx.NewServer(server.New(logger, server.Routes{Intake: handler, Stream: streams, Tunnel: tunnels, Checks: checks}), logger)
+	// Open streams and tunnels would otherwise hold a graceful shutdown until
+	// its deadline. Tunnels get goaway first, then their subscriptions close.
 	public.RegisterOnShutdown(hub.Shutdown)
+	public.RegisterOnShutdown(func() {
+		tunnels.Shutdown()
+		tunnelHub.Shutdown()
+		responseHub.Shutdown()
+	})
 	internal := httpx.NewServer(promhttp.HandlerFor(m.Registry, promhttp.HandlerOpts{}), logger)
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return httpx.ListenAndServe(gctx, public, cfg.Addr, logger, cfg.ShutdownTimeout) })
 	g.Go(func() error { return httpx.ListenAndServe(gctx, internal, cfg.MetricsAddr, logger, 5*time.Second) })
-	g.Go(func() error {
-		hub.Run(gctx)
-		return nil
-	})
+	for _, h := range []*pubsub.Hub{hub, tunnelHub, responseHub} {
+		g.Go(func() error {
+			h.Run(gctx)
+			return nil
+		})
+	}
 	g.Go(func() error {
 		// Runs until the servers have drained, then flushes the last counts.
 		ctrs.Run(gctx)

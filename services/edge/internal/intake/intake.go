@@ -9,6 +9,7 @@ package intake
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,11 +36,13 @@ import (
 	"github.com/kaanxsrd/hookline/packages/gocommon/httpx"
 	"github.com/kaanxsrd/hookline/packages/gocommon/jobs"
 	"github.com/kaanxsrd/hookline/packages/gocommon/logging"
+	"github.com/kaanxsrd/hookline/packages/protocol"
 	"github.com/kaanxsrd/hookline/services/edge/internal/counters"
 	"github.com/kaanxsrd/hookline/services/edge/internal/endpoints"
 	"github.com/kaanxsrd/hookline/services/edge/internal/live"
 	"github.com/kaanxsrd/hookline/services/edge/internal/metrics"
 	"github.com/kaanxsrd/hookline/services/edge/internal/ratelimit"
+	"github.com/kaanxsrd/hookline/services/edge/internal/tunnel"
 )
 
 // InlineMaxBytes is the largest body stored in PostgreSQL; larger bodies go
@@ -51,8 +54,13 @@ type EndpointSource interface {
 	Lookup(ctx context.Context, slug string) (endpoints.Endpoint, error)
 }
 
-// Deps are the handler's collaborators. Limiter, Blobs, Publisher, Counters
-// and Jobs may be nil: the corresponding feature is then disabled.
+// TunnelRelay hands captured requests to connected CLI tunnels.
+type TunnelRelay interface {
+	Offer(ctx context.Context, endpointID uuid.UUID, req protocol.Request, wait time.Duration) (*protocol.Response, error)
+}
+
+// Deps are the handler's collaborators. Limiter, Blobs, Publisher, Counters,
+// Jobs and Tunnels may be nil: the corresponding feature is then disabled.
 type Deps struct {
 	Pool    *pgxpool.Pool
 	Queries *dbq.Queries
@@ -62,6 +70,7 @@ type Deps struct {
 	Limiter   *ratelimit.Limiter
 	Blobs     blob.Store
 	Publisher *live.Publisher
+	Tunnels   TunnelRelay
 	Counters  *counters.Counters
 	IPs       *clientip.Resolver
 	Metrics   *metrics.Metrics
@@ -240,6 +249,23 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h.publish(ctx, ep, params, ip.String(), deliveries)
 	h.Metrics.IntakeBytes.Add(float64(len(body)))
+
+	if h.Tunnels != nil {
+		frame := tunnel.NewRequest(id, ep.ID, r.Method, params.Path, r.URL.RawQuery, headerPairs(r), body, receivedAt)
+		if ep.ResponseMode == dbq.ResponseModeCliSync {
+			if resp := h.awaitTunnel(ctx, ep, frame); resp != nil {
+				h.Metrics.IntakeDuration.WithLabelValues("captured").Observe(h.Now().Sub(start).Seconds())
+				h.respondFromTunnel(ctx, w, params, resp)
+				return
+			}
+		} else {
+			pubCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+			if _, err := h.Tunnels.Offer(pubCtx, ep.ID, frame, 0); err != nil {
+				h.degrade(ctx, "redis", "tunnel_publish", err)
+			}
+			cancel()
+		}
+	}
 	h.Metrics.IntakeDuration.WithLabelValues("captured").Observe(h.Now().Sub(start).Seconds())
 
 	if ep.ResponseDelay > 0 {
@@ -352,6 +378,69 @@ func (h *Handler) publish(ctx context.Context, ep endpoints.Endpoint, p dbq.Inse
 	if err := h.Publisher.PublishRequest(pubCtx, s); err != nil {
 		h.degrade(ctx, "redis", "publish", err)
 	}
+}
+
+// awaitTunnel offers a sync-mode request to the endpoint's CLIs and returns
+// the first answer, or nil when the static response should be sent.
+func (h *Handler) awaitTunnel(ctx context.Context, ep endpoints.Endpoint, frame protocol.Request) *protocol.Response {
+	wait := ep.SyncTimeout
+	if wait <= 0 {
+		wait = 10 * time.Second
+	}
+	resp, err := h.Tunnels.Offer(ctx, ep.ID, frame, wait)
+	switch {
+	case err == nil:
+		h.Metrics.TunnelSync.WithLabelValues("answered").Inc()
+		return resp
+	case errors.Is(err, tunnel.ErrNoTunnel):
+		h.Metrics.TunnelSync.WithLabelValues("no_tunnel").Inc()
+	case errors.Is(err, tunnel.ErrTimeout):
+		h.Metrics.TunnelSync.WithLabelValues("timeout").Inc()
+	case errors.Is(err, tunnel.ErrTargetFailed):
+		h.Metrics.TunnelSync.WithLabelValues("target_failed").Inc()
+	case ctx.Err() != nil:
+	default:
+		h.Metrics.TunnelSync.WithLabelValues("error").Inc()
+		h.degrade(ctx, "redis", "tunnel_sync", err)
+	}
+	return nil
+}
+
+// respondFromTunnel answers the sender with what the CLI's local target
+// returned. Headers go through the same allow-list as custom responses and
+// the sandbox CSP stays in place, so a tunnel cannot make Hookline's domain
+// serve active content.
+func (h *Handler) respondFromTunnel(ctx context.Context, w http.ResponseWriter, p dbq.InsertRequestParams, resp *protocol.Response) {
+	body, err := base64.StdEncoding.DecodeString(resp.BodyB64)
+	if err != nil {
+		body = nil
+	}
+	hdr := w.Header()
+	for _, pair := range resp.Headers {
+		if allowedResponseHeader(pair[0], pair[1]) {
+			hdr.Add(pair[0], pair[1])
+		}
+	}
+	status := resp.Status
+	if status < 200 {
+		// Informational statuses cannot end a response.
+		status = http.StatusBadGateway
+	}
+	w.WriteHeader(status)
+	// The body is the endpoint owner's local response; the sandbox CSP and
+	// nosniff set for every intake response keep it inert in browsers.
+	_, _ = w.Write(body) //nolint:gosec // see above
+
+	go func() {
+		// The row was stored with the static status; record the real one.
+		uctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer cancel()
+		if err := h.Queries.SetRequestResponseStatus(uctx, dbq.SetRequestResponseStatusParams{
+			ID: p.ID, ReceivedAt: p.ReceivedAt, Status: int32(status), //nolint:gosec // validated 200..599
+		}); err != nil {
+			h.Logger.WarnContext(uctx, "record sync response status", "error", err)
+		}
+	}()
 }
 
 func respond(w http.ResponseWriter, ep endpoints.Endpoint) {

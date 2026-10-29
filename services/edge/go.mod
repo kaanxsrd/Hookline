@@ -4,10 +4,13 @@ go 1.27.0
 
 require (
 	github.com/alicebob/miniredis/v2 v2.40.0
+	github.com/coder/websocket v1.8.15
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
+	github.com/kaanxsrd/hookline/cli v0.0.0
 	github.com/kaanxsrd/hookline/packages/gocommon v0.0.0
+	github.com/kaanxsrd/hookline/packages/protocol v0.0.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/riverqueue/river v0.50.0
@@ -100,3 +103,7 @@ require (
 )
 
 replace github.com/kaanxsrd/hookline/packages/gocommon => ../../packages/gocommon
+
+replace github.com/kaanxsrd/hookline/packages/protocol => ../../packages/protocol
+
+replace github.com/kaanxsrd/hookline/cli => ../../cli

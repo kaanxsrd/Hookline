@@ -42,3 +42,12 @@ export async function publishEndpointEvent(
     console.warn("could not publish live event", { endpointId, type, error });
   }
 }
+
+/** CLI tunnels connected to an endpoint (sessions refresh their entry while alive). */
+export async function tunnelCount(endpointId: string): Promise<number> {
+  try {
+    return await getRedis().zcount(`tunnel:ep-sessions:${endpointId}`, Date.now(), "+inf");
+  } catch {
+    return 0;
+  }
+}

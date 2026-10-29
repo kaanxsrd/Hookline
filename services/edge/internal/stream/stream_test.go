@@ -27,6 +27,7 @@ import (
 	"github.com/kaanxsrd/hookline/services/edge/internal/intake"
 	"github.com/kaanxsrd/hookline/services/edge/internal/live"
 	"github.com/kaanxsrd/hookline/services/edge/internal/metrics"
+	"github.com/kaanxsrd/hookline/services/edge/internal/pubsub"
 	"github.com/kaanxsrd/hookline/services/edge/internal/server"
 	"github.com/kaanxsrd/hookline/services/edge/internal/stream"
 	"github.com/kaanxsrd/hookline/services/edge/internal/streamauth"
@@ -40,7 +41,7 @@ type env struct {
 	t        *testing.T
 	pool     *pgxpool.Pool
 	mr       *miniredis.Miniredis
-	hub      *stream.Hub
+	hub      *pubsub.Hub
 	srv      *httptest.Server
 	endpoint uuid.UUID
 }
@@ -54,7 +55,7 @@ func newEnv(t *testing.T) *env {
 	t.Cleanup(func() { _ = rdb.Close() })
 
 	m := metrics.New()
-	hub := stream.NewHub(rdb, logging.Discard())
+	hub := pubsub.NewHub(rdb, logging.Discard())
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 	t.Cleanup(cancel)
@@ -296,8 +297,8 @@ func TestShutdownAsksViewersToReconnect(t *testing.T) {
 	_, open := <-c.events
 	assert.False(t, open, "the stream ends after the reconnect event")
 
-	_, err := e.hub.Subscribe(t.Context(), e.endpoint)
-	require.ErrorIs(t, err, stream.ErrClosed)
+	_, err := e.hub.Subscribe(t.Context(), live.Channel(e.endpoint))
+	require.ErrorIs(t, err, pubsub.ErrClosed)
 }
 
 func TestLaggingViewerIsDisconnected(t *testing.T) {
@@ -305,20 +306,20 @@ func TestLaggingViewerIsDisconnected(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
-	hub := stream.NewHub(rdb, logging.Discard())
+	hub := pubsub.NewHub(rdb, logging.Discard())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go hub.Run(ctx)
 
 	ep := uuid.New()
-	slow, err := hub.Subscribe(t.Context(), ep)
+	slow, err := hub.Subscribe(t.Context(), live.Channel(ep))
 	require.NoError(t, err)
 	for i := range 300 {
 		require.NoError(t, rdb.Publish(t.Context(), live.Channel(ep), `{"type":"ping","payload":{}}`).Err(), i)
 	}
 	select {
 	case <-slow.Done():
-		assert.Equal(t, stream.ReasonLagging, slow.Reason())
+		assert.Equal(t, pubsub.ReasonLagging, slow.Reason())
 	case <-time.After(5 * time.Second):
 		t.Fatal("slow viewer was not disconnected")
 	}

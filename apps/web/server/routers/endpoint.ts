@@ -1,38 +1,21 @@
 import "server-only";
 import { schema } from "@hookline/db";
-import type { Pair } from "@hookline/db/schema";
 import { TRPCError } from "@trpc/server";
 import { and, count, desc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { authorizeAnonymous, parseVisitorCookie, VISITOR_COOKIE } from "@/lib/anonymous";
+import {
+  checkEndpointQuota,
+  ENDPOINT_TEMPLATES,
+  insertEndpoint,
+  QuotaError,
+} from "@/lib/endpoints";
 import { intakeUrl } from "@/lib/env";
-import { orgPlan } from "@/lib/plans";
-import { newSlug } from "@/lib/random";
-import { invalidateEndpointCache, publishEndpointEvent } from "@/lib/redis";
+import { invalidateEndpointCache, publishEndpointEvent, tunnelCount } from "@/lib/redis";
 import { orgProcedure, router } from "../trpc/init";
 
 const e = schema.endpoint;
-
-export const ENDPOINT_TEMPLATES = ["generic", "stripe", "github", "shopify", "discord"] as const;
-export type EndpointTemplate = (typeof ENDPOINT_TEMPLATES)[number];
-
-/** Default responses that keep each provider happy. Signature checks are configured separately. */
-const templateResponses: Record<
-  EndpointTemplate,
-  { status: number; headers: Pair[]; body: string }
-> = {
-  generic: { status: 200, headers: [], body: "" },
-  stripe: {
-    status: 200,
-    headers: [["Content-Type", "application/json"]],
-    body: '{"received":true}',
-  },
-  github: { status: 202, headers: [], body: "" },
-  shopify: { status: 200, headers: [], body: "" },
-  // Discord interactions expect a PONG ({"type":1}) to their PING.
-  discord: { status: 200, headers: [["Content-Type", "application/json"]], body: '{"type":1}' },
-};
 
 const slugInput = z.string().regex(/^[0-9A-Za-z]{12}$/, "Invalid endpoint");
 
@@ -49,17 +32,16 @@ async function ownedEndpoint(
   return row;
 }
 
+/** Maps a plan limit to a tRPC error. */
 async function assertEndpointQuota(ctx: { db: import("@hookline/db").Db; org: { id: string } }) {
-  const { limits, plan } = await orgPlan(ctx.db, ctx.org.id);
-  if (limits.endpoints === null) return limits;
-  const [existing] = await ctx.db.select({ n: count() }).from(e).where(eq(e.orgId, ctx.org.id));
-  if ((existing?.n ?? 0) >= limits.endpoints) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: `The ${plan} plan includes ${limits.endpoints} endpoints. Delete one or upgrade to create more.`,
-    });
+  try {
+    return await checkEndpointQuota(ctx.db, ctx.org.id);
+  } catch (error) {
+    if (error instanceof QuotaError) {
+      throw new TRPCError({ code: "FORBIDDEN", message: error.message });
+    }
+    throw error;
   }
-  return limits;
 }
 
 export const endpointRouter = router({
@@ -130,6 +112,7 @@ export const endpointRouter = router({
       requestCount: row.requestCount,
       lastRequestAt: row.lastRequestAt,
       createdAt: row.createdAt,
+      tunnels: await tunnelCount(row.id),
     };
   }),
 
@@ -144,32 +127,13 @@ export const endpointRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const limits = await assertEndpointQuota(ctx);
-      const response = templateResponses[input.template];
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const [row] = await ctx.db
-          .insert(e)
-          .values({
-            orgId: ctx.org.id,
-            slug: newSlug(),
-            name: input.name,
-            description: input.description,
-            responseStatus: response.status,
-            responseHeaders: response.headers,
-            responseBody: response.body,
-            retentionHours: limits.retention_hours,
-          })
-          .onConflictDoNothing({ target: e.slug })
-          .returning({ id: e.id, slug: e.slug });
-        if (row) {
-          ctx.audit({
-            type: "endpoint",
-            id: row.id,
-            metadata: { name: input.name, slug: row.slug, template: input.template },
-          });
-          return { ...row, url: intakeUrl(row.slug) };
-        }
-      }
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not allocate a URL." });
+      const row = await insertEndpoint(ctx.db, ctx.org.id, limits, input);
+      ctx.audit({
+        type: "endpoint",
+        id: row.id,
+        metadata: { name: input.name, slug: row.slug, template: input.template },
+      });
+      return { ...row, url: intakeUrl(row.slug) };
     }),
 
   update: orgProcedure

@@ -88,6 +88,10 @@
         "@hookline/db": "workspace:*",
       },
     },
+    "packages/protocol": {
+      "name": "@hookline/protocol",
+      "version": "0.0.0",
+    },
     "packages/shared": {
       "name": "@hookline/shared",
       "version": "0.0.0",
@@ -269,6 +273,8 @@
     "@hookline/edge": ["@hookline/edge@workspace:services/edge"],
 
     "@hookline/gocommon": ["@hookline/gocommon@workspace:packages/gocommon"],
+
+    "@hookline/protocol": ["@hookline/protocol@workspace:packages/protocol"],
 
     "@hookline/shared": ["@hookline/shared@workspace:packages/shared"],
 

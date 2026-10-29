@@ -13,7 +13,14 @@ var (
 	version = "dev"
 	commit  = ""
 	date    = ""
+	// defaultURL is the Hookline instance used when neither --url,
+	// HOOKLINE_URL nor the config file names one. Release builds set it to
+	// the hosted instance; development builds talk to a local stack.
+	defaultURL = "http://localhost:3000"
 )
+
+// DefaultURL is the instance the CLI talks to unless configured otherwise.
+func DefaultURL() string { return defaultURL }
 
 // Info describes the running binary.
 type Info struct {

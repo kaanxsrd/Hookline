@@ -15,7 +15,8 @@
     "services/edge",
     "services/worker",
     "cli",
-    "packages/gocommon"
+    "packages/gocommon",
+    "packages/protocol"
   ],
   "scripts": {
     "dev": "turbo run dev",

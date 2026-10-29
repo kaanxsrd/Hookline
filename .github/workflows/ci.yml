@@ -111,7 +111,7 @@ jobs:
         working-directory: apps/web
         run: bunx playwright install --with-deps chromium
 
-      # CI=true makes Playwright start `next start` and the edge itself.
+      # CI=true makes Playwright start `next start`, the edge and the worker itself.
       - run: bun run test:e2e
 
       - name: Upload Playwright report

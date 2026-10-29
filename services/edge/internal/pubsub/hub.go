@@ -1,11 +1,11 @@
-// Package stream serves live endpoint events to dashboards over SSE.
+// Package pubsub multiplexes Redis pub/sub channels across local consumers.
 //
-// Each edge process holds a single Redis pub/sub connection (the Hub). It
-// subscribes to an endpoint's channel when the first local viewer arrives and
-// unsubscribes when the last one leaves, then fans every message out in
-// memory. A viewer that cannot keep up is disconnected; it reconnects and
-// resumes from its Last-Event-ID instead of slowing everyone else down.
-package stream
+// A Hub holds a single Redis pub/sub connection. It subscribes to a channel
+// when the first local consumer arrives and unsubscribes when the last one
+// leaves, then fans every message out in memory. A consumer that cannot keep
+// up is disconnected (it reconnects and resumes) instead of slowing everyone
+// else down. SSE viewers and CLI tunnels each use their own Hub.
+package pubsub
 
 import (
 	"context"
@@ -13,13 +13,10 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-
-	"github.com/kaanxsrd/hookline/services/edge/internal/live"
 )
 
-// subscriberBuffer is how many events a viewer may fall behind before it is cut off.
+// subscriberBuffer is how many messages a consumer may fall behind before it is cut off.
 const subscriberBuffer = 256
 
 // Close reasons.
@@ -29,9 +26,9 @@ const (
 )
 
 // ErrClosed is returned by Subscribe after Shutdown.
-var ErrClosed = errors.New("stream hub is shut down")
+var ErrClosed = errors.New("pubsub hub is shut down")
 
-// Subscriber receives one endpoint's raw event messages.
+// Subscriber receives one channel's raw messages.
 type Subscriber struct {
 	channel string
 	events  chan []byte
@@ -107,9 +104,8 @@ func (h *Hub) dispatch(ctx context.Context, channel string, payload []byte) {
 	}
 }
 
-// Subscribe registers a viewer for endpointID's events.
-func (h *Hub) Subscribe(ctx context.Context, endpointID uuid.UUID) (*Subscriber, error) {
-	channel := live.Channel(endpointID)
+// Subscribe registers a consumer of channel.
+func (h *Hub) Subscribe(ctx context.Context, channel string) (*Subscriber, error) {
 	s := &Subscriber{channel: channel, events: make(chan []byte, subscriberBuffer), done: make(chan struct{})}
 
 	h.mu.Lock()

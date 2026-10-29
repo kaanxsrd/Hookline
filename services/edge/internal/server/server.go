@@ -24,6 +24,7 @@ type Check struct {
 type Routes struct {
 	Intake http.Handler
 	Stream http.Handler
+	Tunnel http.Handler
 	Checks []Check
 }
 
@@ -46,6 +47,9 @@ func New(logger *slog.Logger, routes Routes) http.Handler {
 	}
 	if routes.Stream != nil {
 		r.Get("/v1/stream/{endpointId}", routes.Stream.ServeHTTP)
+	}
+	if routes.Tunnel != nil {
+		r.Get("/v1/tunnel", routes.Tunnel.ServeHTTP)
 	}
 	return r
 }

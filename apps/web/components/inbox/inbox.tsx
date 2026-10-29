@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowUp, Inbox as InboxIcon, Pause, Play } from "lucide-react";
+import { ArrowUp, Inbox as InboxIcon, Pause, Play, Terminal } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,8 @@ type Props = {
   since: string;
   initialSelectedId?: string | undefined;
   onResync?: () => void;
+  /** Connected CLI tunnels when the page rendered; omitted where tunnels do not apply. */
+  initialTunnels?: number | undefined;
 };
 
 const ROW_HEIGHT = 52;
@@ -61,7 +63,15 @@ function isTyping(target: EventTarget | null): boolean {
   );
 }
 
-export function Inbox({ source, initial, since, initialSelectedId, onResync }: Props) {
+export function Inbox({
+  source,
+  initial,
+  since,
+  initialSelectedId,
+  onResync,
+  initialTunnels,
+}: Props) {
+  const [tunnels, setTunnels] = useState(initialTunnels);
   const queryClient = useQueryClient();
   const [filterState, setFilter] = useState<RequestFilter>({});
   const [range, setRange] = useState<TimeRange>("all");
@@ -118,6 +128,7 @@ export function Inbox({ source, initial, since, initialSelectedId, onResync }: P
       queryClient.invalidateQueries({ queryKey: ["inbox-detail", source.key, e.request_id] });
     },
     ...(onResync ? { onResync } : {}),
+    onTunnels: setTunnels,
   });
 
   const heldVisible = useMemo(() => held.filter((s) => matchesLive(s, filter)), [held, filter]);
@@ -314,6 +325,16 @@ export function Inbox({ source, initial, since, initialSelectedId, onResync }: P
           />
         </div>
         <div className="flex items-center gap-2">
+          {tunnels !== undefined && (
+            <span
+              data-testid="cli-count"
+              title="CLI tunnels connected (hookline listen)"
+              className="text-muted-foreground inline-flex items-center gap-1 text-xs"
+            >
+              <Terminal className="size-3.5" aria-hidden />
+              {tunnels} CLI
+            </span>
+          )}
           <LiveStatusBadge status={paused ? "reconnecting" : status} />
           <Button
             variant="outline"

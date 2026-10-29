@@ -362,6 +362,8 @@ func TestRateLimit(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	e.endpoint(endpointOpts{anonymous: true}) // anonymous: 2/s, burst 20
+	// Freeze Redis TIME so a slow machine cannot refill the bucket mid-test.
+	e.mr.SetTime(time.Now())
 
 	var last *httptest.ResponseRecorder
 	for range 21 {

@@ -17,6 +17,7 @@ type Props = {
   canReveal: boolean;
   canDelete: boolean;
   appUrl: string;
+  tunnels: number;
 };
 
 export function EndpointInbox(props: Props) {
@@ -67,6 +68,7 @@ export function EndpointInbox(props: Props) {
       since={props.since}
       initialSelectedId={props.selectedId}
       onResync={() => router.refresh()}
+      initialTunnels={props.tunnels}
     />
   );
 }

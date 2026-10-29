@@ -71,6 +71,7 @@ export async function EndpointView({
         canReveal={hasRole(org.role, "member")}
         canDelete={hasRole(org.role, "member")}
         appUrl={env().APP_URL}
+        tunnels={endpoint.tunnels}
       />
     </div>
   );

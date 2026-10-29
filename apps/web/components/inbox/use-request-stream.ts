@@ -24,6 +24,8 @@ type Handlers = {
   onRequest: (summary: RequestSummary) => void;
   onDelivery?: (event: DeliveryEvent) => void;
   onEndpoint?: (changes: Record<string, unknown>) => void;
+  /** The number of connected CLI tunnels changed. */
+  onTunnels?: (count: number) => void;
   /** More requests were missed than the edge replays; reload the list. */
   onResync?: () => void;
 };
@@ -122,6 +124,9 @@ export function useRequestStream({ getAccess, since, ...handlers }: Options): Li
       es.addEventListener("delivery", (e) => on.current.onDelivery?.(data(e) as DeliveryEvent));
       es.addEventListener("endpoint", (e) =>
         on.current.onEndpoint?.(data(e) as Record<string, unknown>),
+      );
+      es.addEventListener("tunnels", (e) =>
+        on.current.onTunnels?.((data(e) as { count: number }).count),
       );
       es.addEventListener("resync", () => on.current.onResync?.());
       es.addEventListener("reconnect", (e) => {
