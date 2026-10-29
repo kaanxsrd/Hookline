@@ -1,0 +1,76 @@
+export const metadata = {
+  title: "REST API",
+  description: "Authenticate, handle errors, paginate and retry safely with the Hookline API.",
+};
+
+# REST API
+
+Endpoints, requests, destinations, deliveries and usage are available over a JSON API at `/api/v1`. It is described by an OpenAPI 3 document at [`/api/v1/openapi.json`](/api/v1/openapi.json), and you can browse it in the [API reference](/docs/api).
+
+## Authentication
+
+Admins and owners create keys in **Settings → API keys**. Keys belong to an organization, carry scopes, can expire after 30, 90 or 365 days, and are shown only once. Send the key as a bearer token:
+
+```sh
+curl https://<your instance>/api/v1/endpoints \
+  -H "Authorization: Bearer hk_live_..."
+```
+
+| Scope                | Allows                                                  |
+| -------------------- | ------------------------------------------------------- |
+| `endpoints:read`     | Listing and reading endpoints                           |
+| `endpoints:write`    | Creating, updating and deleting endpoints               |
+| `requests:read`      | Reading captured requests, with headers and bodies      |
+| `requests:replay`    | Replaying requests and retrying deliveries              |
+| `destinations:write` | Creating, updating and deleting destinations            |
+| `tunnel`             | Opening CLI tunnels                                     |
+
+`hookline login` creates a key with the scopes the CLI needs. Revoke keys from the same settings page; a revoked key stops working at once.
+
+## Errors
+
+Every error has the same shape:
+
+```json
+{
+  "error": {
+    "code": "insufficient_scope",
+    "message": "This API key lacks the requests:replay scope.",
+    "details": { "required_scope": "requests:replay" }
+  }
+}
+```
+
+| Status | Common codes                                                                         |
+| ------ | ------------------------------------------------------------------------------------ |
+| 400    | `invalid_request` (with `details.fields`), `invalid_json`, `invalid_idempotency_key` |
+| 401    | `unauthorized`                                                                       |
+| 403    | `insufficient_scope`, `plan_limit`                                                   |
+| 404    | `not_found`                                                                          |
+| 409    | `idempotency_key_in_progress`                                                        |
+| 415    | `unsupported_media_type`                                                             |
+| 422    | `idempotency_key_reused`                                                             |
+| 429    | `rate_limited`                                                                       |
+| 500    | `internal`                                                                           |
+
+Some operations have codes of their own, such as `no_tunnel` when replaying to a CLI that is not connected. The [API reference](/docs/api) lists them with each operation.
+
+## Pagination
+
+Lists of endpoints, requests and deliveries take `limit` (up to 100) and `cursor`. Pass the response's `next_cursor` as `cursor` to get the next page. It is `null` on the last page.
+
+## Idempotency
+
+Send an `Idempotency-Key` header with any `POST` to make retries safe. The first response is stored for 24 hours, and a retry with the same key gets it back with `Idempotent-Replayed: true`. A retry while the first call is still running gets `409`, and reusing a key for a different request gets `422`.
+
+```sh
+curl -X POST https://<your instance>/api/v1/endpoints \
+  -H "Authorization: Bearer $HOOKLINE_API_KEY" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H 'Content-Type: application/json' \
+  -d '{"name": "Stripe staging", "template": "stripe"}'
+```
+
+## Rate limits
+
+Each key can make bursts of 120 requests, refilled at 10 per second. Every response carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset`. Over the limit you get `429` with `Retry-After`.

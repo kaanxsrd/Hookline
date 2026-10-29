@@ -1,5 +1,6 @@
 import { openapiDocument } from "@hookline/shared";
 import type { Metadata } from "next";
+import { SiteHeader } from "@/components/marketing/site-header";
 import { ApiReference } from "./api-reference";
 
 export const metadata: Metadata = {
@@ -9,8 +10,12 @@ export const metadata: Metadata = {
 
 export default function ApiReferencePage() {
   return (
-    <main className="min-h-dvh">
-      <ApiReference spec={openapiDocument} />
-    </main>
+    <>
+      {/* Not sticky: Scalar's own sidebar sticks to the top of the viewport. */}
+      <SiteHeader sticky={false} />
+      <main className="min-h-dvh">
+        <ApiReference spec={openapiDocument} />
+      </main>
+    </>
   );
 }

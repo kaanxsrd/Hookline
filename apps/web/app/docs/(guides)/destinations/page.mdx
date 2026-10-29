@@ -1,0 +1,55 @@
+export const metadata = {
+  title: "Destinations",
+  description: "Forward captured webhooks to your servers with filters, retries and signatures.",
+};
+
+# Destinations
+
+A destination forwards an endpoint's requests to a URL, such as your staging server, a queue or another service. Forwarding is durable: a request is never captured without its deliveries, and failed deliveries are retried.
+
+## Adding a destination
+
+Open an endpoint, go to **Destinations** and add a URL (`http` or `https`). Each destination has:
+
+- **Filter:** which requests to forward (see below). Without one, every request is forwarded.
+- **Extra headers** to set on every forwarded request, for example an authorization token for your server.
+- **Timeout:** 1 to 30 seconds (10 by default).
+- **Maximum attempts:** 1 to 20 (8 by default).
+- **Standard Webhooks signing**, optional (see below).
+
+Use **Send test** to forward the latest request right away. Your plan sets how many destinations an endpoint can have.
+
+## What is sent
+
+The request is sent with its original method, body and headers, without hop-by-hop headers. The captured sub-path is added to the destination's path and the captured query to its query. Hookline adds:
+
+| Header                   | Value                                   |
+| ------------------------ | --------------------------------------- |
+| `X-Hookline-Request-Id`  | The captured request's ID               |
+| `X-Hookline-Delivery-Id` | This delivery's ID                      |
+| `X-Hookline-Attempt`     | The attempt number, starting at 1       |
+| `X-Hookline-Endpoint`    | The endpoint's slug                     |
+
+## Filters
+
+Every condition you set must match:
+
+- **Methods:** the request uses one of them.
+- **Header equals:** a header (name in any case) has exactly this value.
+- **JSON path equals:** the JSON body holds this value at a path such as `type`, `$.data.object.status` or `items[0].id`. Requests whose body is not JSON never match.
+
+For example, to forward only paid Stripe checkouts, set the JSON path `type` to `checkout.session.completed`.
+
+## Retries
+
+Network errors, timeouts and the statuses `408`, `429` and `5xx` are retried with exponential backoff and jitter: about 10 seconds, then 20, 40 and so on, up to 6 hours between attempts. A `Retry-After` header from your server is honored. Other `4xx` answers fail at once, since sending the same request again would not help.
+
+Every attempt is kept with its status, duration and the start of the response body. You can see them in the **Deliveries** page and in each request's **Deliveries** tab, and retry a failed delivery by hand. When a delivery fails for good, the organization's owners and admins are emailed, at most once an hour per destination.
+
+## Signing forwarded requests
+
+Turn on **Standard Webhooks signing** and Hookline signs each forwarded request following [Standard Webhooks](https://www.standardwebhooks.com), with `webhook-id`, `webhook-timestamp` and `webhook-signature` headers. Use any Standard Webhooks library on your server to check that the request came from Hookline. The secret (`whsec_…`) is stored encrypted.
+
+## Private networks
+
+Destinations cannot reach loopback, private or link-local addresses. Every address is checked when the connection is made, so DNS tricks cannot get around the check either. To send webhooks to your own machine, use the [CLI](/docs/cli) instead.

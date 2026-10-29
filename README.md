@@ -41,6 +41,7 @@ The first `bun run dev` or `bun run check` also builds the pinned Go tools (air,
 | `bun run db:seed`     | Loads demo data (safe to re-run)                     |
 | `bun run db:generate` | Generates a migration from schema changes            |
 | `bun run db:studio`   | Opens Drizzle Studio                                 |
+| `bun run admin:grant` | Makes an account an instance administrator           |
 | `bun run gen`         | Regenerates entitlements and sqlc code               |
 
 ## Repository layout

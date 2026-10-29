@@ -12,7 +12,7 @@ import { OrgSwitcher } from "./org-switcher";
 import { UserMenu } from "./user-menu";
 
 export type ShellOrg = { slug: string; name: string; role: string; plan: string };
-export type ShellUser = { name: string; email: string; image: string | null };
+export type ShellUser = { name: string; email: string; image: string | null; isAdmin: boolean };
 
 type Props = {
   org: ShellOrg;

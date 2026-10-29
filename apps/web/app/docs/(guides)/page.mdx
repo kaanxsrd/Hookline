@@ -1,0 +1,42 @@
+export const metadata = {
+  title: "Documentation",
+  description: "Capture, inspect, replay and forward webhooks with Hookline.",
+};
+
+# Introduction
+
+Hookline gives you a URL that captures any HTTP request. You can watch requests arrive live, inspect them, replay them, forward them to your servers and pipe them to localhost through a CLI tunnel.
+
+## Capture your first webhook
+
+1. Open [Get a webhook URL](/new). You get a temporary endpoint right away, no account needed. It lasts 24 hours and keeps up to 100 requests.
+2. Send it something:
+
+   ```sh
+   curl -X POST https://<your instance>/h/<slug>/orders \
+     -H 'Content-Type: application/json' \
+     -d '{"id": "ord_123", "status": "paid"}'
+   ```
+
+3. The request shows up in the inbox within about a tenth of a second, with its method, path, headers, query and body.
+
+To keep the endpoint, [sign up](/sign-up). During onboarding you can claim it into your new organization along with everything it captured.
+
+## Send webhooks to your laptop
+
+Install the [CLI](/docs/cli), sign in once, and forward an endpoint to your local server:
+
+```sh
+hookline login
+hookline listen <slug> --forward http://localhost:3000/api/webhooks
+```
+
+Every request the endpoint captures is now also sent to `localhost:3000`, and your server's status code is printed next to it. The endpoint keeps capturing while you are offline, so you can [replay](/docs/replay) anything you missed.
+
+## Where to next
+
+- [Endpoints](/docs/endpoints): URLs, custom responses, retention and templates.
+- [Inbox](/docs/inbox): filters, search, body views and keyboard shortcuts.
+- [Destinations](/docs/destinations): forward to your servers, with filters and retries.
+- [Signature verification](/docs/signatures): check that Stripe, GitHub and others really sent the webhook.
+- [REST API](/docs/rest-api): automate all of it with an API key.

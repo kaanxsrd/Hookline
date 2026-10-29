@@ -1,0 +1,31 @@
+import { PlanTable } from "@/components/docs/plan-table";
+
+export const metadata = {
+  title: "Plans and limits",
+  description: "What each plan includes and what happens at its limits.",
+};
+
+# Plans and limits
+
+Every organization is on a plan. All plans include the live inbox, replay, signature checks, destinations, the CLI and the API; they differ in how much of each you get. See [pricing](/pricing) for prices.
+
+<PlanTable />
+
+## What happens at a limit
+
+| Limit                     | When it is reached                                                                                       |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Requests per month        | Intake answers `429 quota_exceeded` until the month ends. Owners and admins are emailed at 80 % and 100 % |
+| Intake rate               | Intake answers `429 rate_limited` with `Retry-After`                                                     |
+| Largest request body      | Intake answers `413 body_too_large`                                                                      |
+| Endpoints, destinations   | Creating another is refused, in the dashboard and the API (`403 plan_limit`)                            |
+| Members                   | Invitations are refused                                                                                  |
+| CLI tunnels               | Another `hookline listen` is refused until one disconnects                                               |
+| History                   | Older requests are deleted                                                                               |
+| Audit log                 | Older entries are hidden and left out of CSV exports                                                     |
+
+Months follow the calendar in UTC. The **Usage** page shows the current month's requests, endpoints and members against the plan, with a chart of requests per day.
+
+## Changing plans
+
+Owners change plans in **Settings → Billing**. Upgrades apply immediately. When a plan ends or is downgraded, endpoints whose retention is longer than the new plan allows are shortened to match. On instances without billing, an administrator assigns plans.

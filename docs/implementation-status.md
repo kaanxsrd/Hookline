@@ -19,7 +19,7 @@ Legend: ✅ done · 🚧 partially done (see note) · ⬜ not started
 | 9   | Replay, verification & responses | ✅     |
 | 10  | Public API & keys                | ✅     |
 | 11  | Plans, usage & billing           | ✅     |
-| 12  | Marketing, docs & admin          | ⬜     |
+| 12  | Marketing, docs & admin          | ✅     |
 | 13  | Hardening & release              | ⬜     |
 | 14  | README                           | ⬜     |
 
@@ -128,7 +128,7 @@ Legend: ✅ done · 🚧 partially done (see note) · ⬜ not started
 | Better Auth rate limits              | ✅     | Database-backed, strict on sign-in, sign-up, resets and 2FA; `AUTH_RATE_LIMIT_ENABLED=false` only in development and tests                                                                                                                                                                             |
 | CSP and security headers             | ✅     | See docs/architecture.md                                                                                                                                                                                                                                                                               |
 | Tests                                | ✅     | Playwright: sign-up → verify → onboarding → endpoint → live requests; claim a temporary endpoint; Free-plan seat limit, invite a viewer who then cannot create endpoints or read the audit log; 2FA sign-in; passkey sign-in; auth redirect. Vitest: roles, slugs, stream tokens, helpers              |
-| `user.is_admin` area                 | ⬜     | Milestone 12                                                                                                                                                                                                                                                                                           |
+| `user.is_admin` area                 | ✅     | Milestone 12: `/admin`                                                                                                                                                                                                                                                                                 |
 
 ## 6. Inbox
 
@@ -243,6 +243,23 @@ Legend: ✅ done · 🚧 partially done (see note) · ⬜ not started
 | Hookline captures its own Stripe webhooks | ✅     | The seed's `hooklineBill` endpoint plus `hookline listen hooklineBill --forward http://localhost:3000/api/stripe/webhook` (docs/deployment.md)                                                                                                                                                                                                                                             |
 | Tests                                     | ✅     | Go: quota (limit, seeding, fail-open), plan-capped retention, notification debounce, release on send failure, thresholds once per month, unlimited plans, mail rendering/escaping, MIME and SMTP. Playwright: billing disabled state, forged webhook rejected, subscription created → Pro with email and audit entry, deleted → Free, usage page meters and table, audit log gated by plan |
 
-## 12–14
+## 12. Marketing, docs & admin
+
+| Feature               | Status | Notes                                                                                                                                                                                                                                                                                                                                        |
+| --------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Marketing site        | ✅     | `(marketing)` route group with a shared header (sign in or back to the dashboard) and footer; landing page with a `hookline listen` demo, features, how it works and security                                                                                                                                                                |
+| Pricing               | ✅     | `/pricing` from `config/plans.json` (cards and a full comparison table), Stripe amounts when billing is on, FAQ; the billing page shares the same plan copy (`lib/plan-features.ts`)                                                                                                                                                         |
+| Docs                  | ✅     | MDX (`@next/mdx`, GFM tables, heading anchors) under `app/docs/(guides)`: introduction, endpoints, inbox, CLI and tunnels, destinations, replay, signatures, REST API, organizations, plans (table generated from `plans.json`), self-hosting. Sidebar, mobile contents sheet, pager; `/docs/api` keeps Scalar with the site header          |
+| Changelog and legal   | ✅     | `/changelog`, `/security`, `/privacy`, `/terms` in MDX. Privacy and terms are plain-language templates that operators should adapt                                                                                                                                                                                                           |
+| Status page           | ✅     | `/status`: database, Redis, the edge's `/readyz` (`EDGE_INTERNAL_URL`) and the worker (live River leader lease); checked at most every 30 s                                                                                                                                                                                                  |
+| SEO                   | ✅     | `sitemap.xml` (public pages and every docs page), `robots.txt` with the sitemap and `/admin` disallowed, generated Open Graph and Twitter images, SVG icon; their slugs are reserved for organizations                                                                                                                                       |
+| Admin area            | ✅     | `/admin`, 404 for everyone but `user.is_admin` (checked from the database by `adminProcedure`). Overview (totals, plans, recent sign-ups, instance settings), users, organizations, endpoints and an instance audit log; every admin mutation is audited with `org_id` null                                                                  |
+| Users                 | ✅     | Search, details (organizations, sessions, 2FA, passkeys, API keys). Disable deletes sessions, revokes the API keys the user created (CLI logins included) and denies pending device codes; enable; grant and remove administrator (never yourself)                                                                                           |
+| Organizations         | ✅     | Members, endpoints and usage; assign a plan (`plan_override`) that runs the same plan-change path as billing (retention cap, edge cache, audit, email); warns when `PLAN_OVERRIDE` makes it moot                                                                                                                                             |
+| Endpoints             | ✅     | Find by slug or name, filter disabled or temporary; disable with a reason shown to the owners (`410 endpoint_disabled`), re-enable; the edge cache is invalidated and open inboxes are told                                                                                                                                                  |
+| `bun run admin:grant` | ✅     | Makes an existing account an administrator (`--revoke` undoes it) and audits it                                                                                                                                                                                                                                                              |
+| Tests                 | ✅     | Vitest: plan formatting, every docs sidebar link has a page and every guide is linked. Playwright: marketing, legal and every docs page render, pricing table, status components, robots/sitemap/OG image; `/admin` 404 for non-admins, disable/enable an endpoint against intake, assign a plan, disable a user (signed out, sessions gone) |
+
+## 13–14
 
 Not started. Each section is filled in as its milestone lands.

@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { LogOut, Moon, ShieldCheck, Sun, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -54,6 +54,13 @@ export function UserMenu({ user }: { user: ShellUser }) {
             <UserRound className="size-4" aria-hidden /> Account
           </Link>
         </DropdownMenuItem>
+        {user.isAdmin && (
+          <DropdownMenuItem asChild>
+            <Link href="/admin">
+              <ShieldCheck className="size-4" aria-hidden /> Administration
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={() => setTheme(resolvedTheme === "light" ? "dark" : "light")}>
           {resolvedTheme === "light" ? (
             <Moon className="size-4" aria-hidden />

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <title>Hookline</title>
+  <rect width="32" height="32" rx="8" fill="#4f46e5"/>
+  <path d="M11 6v12a5 5 0 0 0 10 0v-3" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <path d="M17.5 14.5 21 11l3.5 3.5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

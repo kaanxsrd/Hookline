@@ -1,0 +1,106 @@
+export const metadata = {
+  title: "CLI and tunnels",
+  description: "Pipe webhooks to localhost, replay requests and send test events from your terminal.",
+};
+
+# CLI and tunnels
+
+The `hookline` CLI forwards what your endpoints capture to a server on your machine, prints requests live, replays them and sends realistic test events.
+
+## Install
+
+Homebrew, Scoop and npm packages arrive with the first release. Until then, build the CLI from the repository with Go 1.27 or later:
+
+```sh
+git clone https://github.com/kaanxsrd/hookline
+cd hookline/cli
+go build -o hookline .
+```
+
+Check for a newer release at any time with `hookline update`. It prints the right upgrade command for how you installed it.
+
+## Sign in
+
+```sh
+hookline login
+```
+
+The CLI shows a code and opens your browser. Approve the code and choose an organization, and the CLI stores an API key for it in your user configuration directory (`hookline/config.json`, readable only by you). `hookline whoami` shows the organization and key in use, and `hookline logout` revokes the key.
+
+In CI or other scripts, set `HOOKLINE_API_KEY` to an [API key](/docs/rest-api) instead.
+
+## Forward to localhost
+
+```sh
+hookline listen <slug> --forward http://localhost:3000/api/webhooks
+```
+
+Each request is sent to your server with its method, sub-path, query, headers and body, and printed with your server's answer:
+
+```text
+✓ Forwarding https://<your instance>/h/<slug> → http://localhost:3000/api/webhooks
+12:04:31  POST /h/<slug>/stripe  → 200  38 ms  payment_intent.succeeded
+```
+
+| Flag                        | What it does                                                          |
+| --------------------------- | --------------------------------------------------------------------- |
+| `--forward URL`             | Where to send requests (required)                                     |
+| `--sync`                    | Answer the sender with your server's response (endpoints in CLI sync mode) |
+| `--path-rewrite /from=/to`  | Rewrite a path prefix; repeatable                                     |
+| `--header Name:value`       | Set a header on forwarded requests; repeatable                        |
+| `--filter-method POST`      | Only forward these methods; repeatable                                |
+
+`listen` takes up to 10 slugs at once. Your plan sets how many tunnels can be open at the same time. The tunnel reconnects on its own after network trouble or a server restart.
+
+### Sync responses
+
+Normally the sender gets the endpoint's configured response straight away. Put the endpoint in **CLI sync** mode and run `listen --sync`, and the sender gets your local server's status, headers and body instead. If your server cannot be reached or does not answer within the endpoint's sync timeout, the configured response is sent.
+
+## Watch without forwarding
+
+```sh
+hookline tail <slug>
+hookline tail <slug> --json | jq .
+```
+
+## Replay
+
+```sh
+hookline replay <requestId> --to http://localhost:3000/api/webhooks
+hookline replay <requestId> --cli
+hookline replay <requestId> --destination <destinationId>
+hookline replay <requestId> --cli --edit
+```
+
+`--to` sends the request from your machine, `--cli` sends it to every CLI listening on its endpoint, and `--destination` queues it for one of the endpoint's destinations. `--edit` opens the request as YAML in `$HOOKLINE_EDITOR`, `$VISUAL` or `$EDITOR` before sending it.
+
+## Send test events
+
+```sh
+hookline trigger --list
+hookline trigger <slug> stripe.payment_intent.succeeded
+```
+
+`trigger` sends a realistic sample event (Stripe, GitHub, Shopify, Discord or generic JSON) to an endpoint. It is signed with the endpoint's secret, so it shows up as verified. Use `--secret` or `HOOKLINE_SIGNING_SECRET` to sign with a different one.
+
+## Manage endpoints
+
+```sh
+hookline endpoints list
+hookline endpoints create "Stripe staging"
+hookline endpoints open <slug>
+hookline endpoints delete <slug>
+```
+
+## Global flags and environment
+
+| Flag / variable                     | Meaning                                                    |
+| ----------------------------------- | ---------------------------------------------------------- |
+| `--json`                            | Machine-readable output                                    |
+| `--org slug`                        | Organization to act for, when you are logged in to several |
+| `--url` / `HOOKLINE_URL`            | The Hookline instance to use                               |
+| `--no-color` / `NO_COLOR`           | Plain output                                               |
+| `HOOKLINE_API_KEY`                  | Use this key instead of the stored one                     |
+| `HOOKLINE_NO_BROWSER`               | Never open a browser (print URLs instead)                  |
+
+Shell completion: `hookline completion bash|zsh|fish|powershell`.

@@ -1,0 +1,31 @@
+export const metadata = {
+  title: "Organizations and roles",
+  description: "Share endpoints with your team, with roles, invitations and an audit log.",
+};
+
+# Organizations and roles
+
+Endpoints, destinations, API keys and plans belong to an organization. You create your first one when you sign up, and you can belong to several. Switch between them from the top of the sidebar.
+
+## Roles
+
+| Role       | Can                                                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------------------- |
+| **Viewer** | See endpoints, requests, deliveries and usage                                                           |
+| **Member** | Everything a viewer can, plus create and change endpoints and destinations, replay, delete requests and reveal masked headers |
+| **Admin**  | Everything a member can, plus invite and manage members, manage API keys, change organization settings and read the audit log |
+| **Owner**  | Everything an admin can, plus manage billing, delete the organization and make others owners           |
+
+People who are not members of an organization cannot tell that it exists. Its pages and API answer as if it did not.
+
+## Invitations
+
+Admins invite people by email with a role. Invitations expire after 48 hours, and inviting the same address again replaces the pending invitation. Your plan sets how many members an organization can have.
+
+## Audit log
+
+Every change made in an organization is recorded with who made it, what changed, when, and from which IP address: endpoints, destinations, members, API keys, settings, replays, header reveals and plan changes. Admins read it in **Settings → Audit log**, filter it by action and export it as CSV. How far back it goes depends on the [plan](/docs/plans).
+
+## Your account
+
+On the **Account** page you can change your name, email address and password, add passkeys, turn on two-factor authentication with an authenticator app (with backup codes), review and revoke your sessions, and delete your account. You cannot delete your account while you are the only owner of an organization that has other members: make someone else an owner first.

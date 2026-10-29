@@ -1,0 +1,66 @@
+export const metadata = {
+  title: "Endpoints",
+  description: "Webhook URLs, custom responses, retention and templates.",
+};
+
+# Endpoints
+
+An endpoint is a URL that captures every request sent to it: `https://<your instance>/h/<slug>`. The slug is 12 random characters, which makes the URL impossible to guess.
+
+## What gets captured
+
+- **Every method**, including `HEAD` and `OPTIONS`. CORS preflights (an `OPTIONS` request with `Origin` and `Access-Control-Request-Method`) are answered with `204` and not captured.
+- **Any sub-path.** `/h/<slug>/stripe/events` is captured with the path `/stripe/events`, so one endpoint can receive several kinds of webhooks.
+- The query string, the headers (in canonical form, with repeated values kept in order), the body, the source IP address, the user agent, the size and a SHA-256 of the body.
+
+Each response carries an `X-Hookline-Request-Id` header with the ID of the captured request.
+
+## Creating endpoints
+
+Create endpoints from the **Endpoints** page, with `hookline endpoints create [name]` or through the [API](/docs/rest-api). A template sets the response and the signature provider for a known sender:
+
+| Template | Response                             | Signature provider and secret            |
+| -------- | ------------------------------------ | ---------------------------------------- |
+| Generic  | `200`, empty body                    | None                                     |
+| Stripe   | `200`, `{"received":true}`           | Stripe: the endpoint's signing secret    |
+| GitHub   | `202`, empty body                    | GitHub: the webhook secret you chose     |
+| Shopify  | `200`, empty body                    | Shopify: the app's client secret         |
+| Discord  | `200`, `{"type":1}` (answers a PING) | Discord: the application's public key    |
+
+Verification starts once you add the secret in the endpoint's settings; until then requests are marked unchecked.
+
+## Responses
+
+By default an endpoint answers `200` with an empty body. In the endpoint's settings you can change:
+
+- **Status:** any code from 200 to 599.
+- **Headers and body**, for senders that expect a particular answer. Responses cannot set cookies, security policies, CORS or framing headers, and every response is served with a sandboxing Content Security Policy.
+- **Delay:** up to 30 seconds before answering, to test the sender's timeouts.
+
+### CLI sync mode
+
+In **CLI sync** mode, the endpoint waits for your local server's answer and sends that to the sender instead. Run `hookline listen <slug> --forward <url> --sync`. If no CLI answers within the sync timeout (1 to 30 seconds, 10 by default), or your server cannot be reached, the static response is sent.
+
+## Retention
+
+Each endpoint keeps requests for its retention period, which can be at most what your [plan](/docs/plans) allows. Older requests are deleted automatically along with their bodies. If you move to a plan with shorter history, longer retention settings are lowered to match.
+
+## Pausing and deleting
+
+A **paused** endpoint answers `410 endpoint_paused` and captures nothing. Deleting an endpoint deletes everything it captured, and its URL stops working right away.
+
+## Errors from intake
+
+| Status | Code                  | Meaning                                                              |
+| ------ | --------------------- | -------------------------------------------------------------------- |
+| 404    | `not_found`           | No endpoint has this slug                                            |
+| 410    | `endpoint_paused`     | The endpoint is paused                                               |
+| 410    | `endpoint_disabled`   | An administrator disabled the endpoint                               |
+| 410    | `endpoint_expired`    | The temporary endpoint expired                                       |
+| 413    | `body_too_large`      | The body is larger than the plan allows                              |
+| 429    | `rate_limited`        | Too many requests for the endpoint or from this address; see `Retry-After` |
+| 429    | `quota_exceeded`      | The organization used its requests for the month                     |
+
+## Temporary endpoints
+
+Endpoints created without an account last 24 hours, keep at most 100 requests and can only be viewed by the browser that created them. Each address can create five a day. Sign up to keep one: it moves into your organization with everything it captured.

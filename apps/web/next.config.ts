@@ -1,4 +1,5 @@
 import path from "node:path";
+import createMDX from "@next/mdx";
 import type { NextConfig } from "next";
 
 // In development the root .env is loaded by the dev script itself
@@ -21,9 +22,16 @@ const config: NextConfig = {
   transpilePackages: ["@hookline/db", "@hookline/shared"],
   reactStrictMode: true,
   typedRoutes: true,
+  // Docs, the changelog and the legal pages are MDX files under app/.
+  pageExtensions: ["ts", "tsx", "mdx"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
 };
 
-export default config;
+// Plugins are named by string so Turbopack can load them.
+const withMDX = createMDX({
+  options: { remarkPlugins: ["remark-gfm"], rehypePlugins: ["rehype-slug"] },
+});
+
+export default withMDX(config);

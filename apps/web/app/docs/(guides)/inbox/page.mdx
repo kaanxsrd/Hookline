@@ -1,0 +1,37 @@
+export const metadata = {
+  title: "Inbox",
+  description: "Watch requests arrive live, filter and search them, and inspect every detail.",
+};
+
+# Inbox
+
+Each endpoint has an inbox that lists its requests as they arrive. New requests appear within about a tenth of a second. If the connection drops, the inbox catches up on what it missed when it reconnects.
+
+## The list
+
+Each row shows the method, path, the status Hookline answered with, the size, the time, the [signature](/docs/signatures) result and one dot per [delivery](/docs/destinations). While you are scrolled down or have paused live updates, new requests wait behind an "N new" pill instead of moving the list.
+
+## Filters and search
+
+Filter by method, signature status (verified, invalid or unchecked), delivery status (including "not forwarded") and time range. Search matches the path and the text of bodies stored inline (up to 64 KiB).
+
+## Request details
+
+- **Body:** a collapsible JSON tree (click a key to copy its JSONPath), form fields, indented XML, raw text or hex. Bodies are always shown as text, never rendered.
+- **Headers:** sensitive values are masked: authorization, cookies, signatures, tokens, secrets and HMACs. Members can reveal them, and each reveal is recorded in the audit log.
+- **Query**, **Deliveries** (every attempt with its response) and **Meta** (ID, time, source IP, user agent, URL, size, SHA-256 and processing time).
+- Bodies larger than 64 KiB are previewed up to that size and can be downloaded in full.
+
+Copy any request as **cURL**, **fetch** or **HTTPie** to send it from your own machine.
+
+## Keyboard shortcuts
+
+| Key       | Action                      |
+| --------- | --------------------------- |
+| `j` / `k` | Next / previous request     |
+| `/`       | Focus search                |
+| `c`       | Copy as cURL                |
+| `r`       | Open the replay menu        |
+| `p`       | Pause or resume live updates |
+| `Esc`     | Close the request           |
+| `⌘K`      | Command palette             |

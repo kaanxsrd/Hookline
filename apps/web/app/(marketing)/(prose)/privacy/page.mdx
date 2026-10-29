@@ -1,0 +1,48 @@
+export const metadata = {
+  title: "Privacy",
+  description: "What Hookline stores about you and the requests you capture, for how long, and how to delete it.",
+};
+
+# Privacy
+
+<Callout>
+  This page describes how the Hookline software handles personal data. If you run your own
+  instance, you are its operator: adapt this page to your organization and the law that applies
+  to you.
+</Callout>
+
+## What we store
+
+**Your account.** Your name, email address, a hash of your password, your passkeys and two-factor settings, and the organizations you belong to, with your role in each.
+
+**Sessions.** For each signed-in device we keep the IP address and user agent, so you can review and revoke your sessions on the account page.
+
+**Captured requests.** Everything a webhook sender sends to your endpoints: method, path, query, headers, body, source IP address and timing. You choose what to point at Hookline. The data belongs to you and is used only to show, forward and replay it for you.
+
+**Activity.** An audit log of changes made in each organization (who, what and when, with the IP address), and daily usage counters used to enforce plan limits.
+
+**Billing.** When billing is enabled, payments are handled by Stripe. We store only the Stripe customer and subscription IDs and the plan. We never see card details.
+
+## How long we keep it
+
+| Data                         | Kept for                                                         |
+| ---------------------------- | ---------------------------------------------------------------- |
+| Captured requests and bodies | The endpoint's retention period, at most what the plan allows    |
+| Temporary endpoints          | 24 hours                                                         |
+| Sessions                     | Until they expire after 7 days, you sign out or revoke them      |
+| Audit log                    | As long as the organization exists; shown for the plan's window  |
+| Account                      | Until you delete it                                              |
+
+## Cookies and storage
+
+Hookline sets only the cookies it needs: your session, a device-trust cookie when you choose to skip two-factor on a device for 30 days, and a cookie that lets your browser view the temporary endpoint it created. Your color theme is kept in your browser's local storage. There are no advertising or analytics cookies, and no third-party scripts, fonts or trackers.
+
+## Emails
+
+We email you to verify your address, reset your password, approve email changes, deliver invitations, and tell owners and admins about failing deliveries, usage limits and plan changes. We do not send marketing email.
+
+## Your choices
+
+- **Delete requests** one at a time, or delete an endpoint to remove everything it captured.
+- **Export** your organization's audit log as CSV, and read everything else through the [REST API](/docs/rest-api).
+- **Delete your account** from the account page. Organizations where you are the only member are deleted with it. If others remain, make someone else an owner first.

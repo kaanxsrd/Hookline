@@ -33,6 +33,7 @@
     "db:migrate": "bun packages/db/scripts/migrate.ts",
     "db:seed": "bun packages/db/scripts/seed.ts",
     "db:studio": "bun run --cwd packages/db db:studio",
+    "admin:grant": "bun packages/db/scripts/admin-grant.ts",
     "setup:go": "bun scripts/go.ts setup"
   },
   "devDependencies": {

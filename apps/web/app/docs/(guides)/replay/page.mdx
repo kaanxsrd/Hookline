@@ -1,0 +1,43 @@
+export const metadata = {
+  title: "Replay",
+  description: "Send any captured request again, as captured or edited.",
+};
+
+# Replay
+
+Fixed the bug? Send the webhook that broke it again. Any request your endpoints still keep can be replayed, as captured or after editing it.
+
+## Where to replay
+
+| Target                | From                                    | How it travels                                                                 |
+| --------------------- | --------------------------------------- | ------------------------------------------------------------------------------ |
+| **A destination**     | Dashboard, API, `hookline replay --destination` | Queued like any delivery, with retries, and listed in Deliveries as a replay |
+| **The CLI**           | Dashboard, API, `hookline replay --cli` | Sent to every `hookline listen` session on the endpoint, marked as a replay    |
+| **Any URL**           | `hookline replay --to`, or copy as cURL | Sent from your own machine                                                     |
+
+In the inbox, open a request and press `r`, or use the **Replay** menu. Replays need the member role.
+
+## Edit and replay
+
+Choose **Edit & replay** to change the method, path, query, headers or body first. Masked header values stay masked in the editor. If you leave them as they are, the original values are filled in on the server, so secrets never pass through your browser. The original request is never changed.
+
+With the CLI, `--edit` opens the request as YAML in your editor:
+
+```sh
+hookline replay <requestId> --cli --edit
+```
+
+## Replays and signatures
+
+A replay carries the original signature headers. Many senders sign a timestamp too, so a strict receiver may reject a replay after its tolerance window (five minutes for Stripe). Test with signature checks relaxed, or use [`hookline trigger`](/docs/cli#send-test-events) to send a freshly signed event.
+
+## Through the API
+
+```sh
+curl -X POST https://<your instance>/api/v1/requests/<requestId>/replay \
+  -H "Authorization: Bearer $HOOKLINE_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"target": {"destination_id": "<destinationId>"}}'
+```
+
+Use `"target": "cli"` to send it to the CLI. Add an `override` object to edit it first; the [API reference](/docs/api) has the details. The key needs the `requests:replay` scope.

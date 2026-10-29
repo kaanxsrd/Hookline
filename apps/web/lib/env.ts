@@ -6,6 +6,8 @@ const schema = z.object({
   APP_URL: z.url().default("http://localhost:3000"),
   /** Public base URL of the edge (intake). Same as APP_URL behind Caddy; :8080 in development. */
   EDGE_PUBLIC_URL: z.url().optional(),
+  /** Where the web app reaches the edge directly (its /readyz feeds the status page). */
+  EDGE_INTERNAL_URL: z.url().optional(),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1).default("redis://localhost:6380/0"),
   /** Signs Better Auth sessions and tokens. */

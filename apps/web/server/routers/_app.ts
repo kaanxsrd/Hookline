@@ -1,5 +1,6 @@
 import "server-only";
 import { router } from "../trpc/init";
+import { adminRouter } from "./admin";
 import { apiKeyRouter } from "./api-key";
 import { auditRouter } from "./audit";
 import { billingRouter } from "./billing";
@@ -15,6 +16,7 @@ import { streamRouter } from "./stream";
 import { usageRouter } from "./usage";
 
 export const appRouter = router({
+  admin: adminRouter,
   apiKey: apiKeyRouter,
   audit: auditRouter,
   billing: billingRouter,

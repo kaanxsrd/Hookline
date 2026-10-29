@@ -1,0 +1,42 @@
+export const metadata = {
+  title: "Changelog",
+  description: "What is new in Hookline.",
+};
+
+# Changelog
+
+New features, improvements and fixes, newest first. CLI releases are published as `cli-v*` tags on [GitHub](https://github.com/kaanxsrd/hookline/releases).
+
+## 0.1.0 (unreleased)
+
+The first release of Hookline.
+
+### Capture and inspect
+
+- Webhook URLs that accept every method on any sub-path, with configurable status, headers, body and delay.
+- Temporary endpoints without an account, which you can keep by signing up.
+- A live inbox that updates in about 100 ms and resumes after a disconnect, with filters, full-text search, keyboard shortcuts and a JSON tree, form, XML, raw and hex views.
+- Sensitive headers masked until revealed, with each reveal audited.
+- Copy any request as cURL, fetch or HTTPie.
+
+### Replay, verify and forward
+
+- Replay to a destination, to the CLI or to any URL, as captured or edited.
+- Signature verification for Stripe, GitHub, Shopify, Slack, Standard Webhooks, Discord and generic HMAC-SHA256.
+- Destinations with method, header and JSON-path filters, durable retries with backoff and an attempt log, optionally signed with Standard Webhooks.
+
+### CLI
+
+- `hookline login` with the device flow, plus `listen`, `tail`, `replay`, `trigger`, `endpoints` and `update`.
+- Tunnels that forward to localhost, with path rewrites, extra headers, method filters and sync responses.
+
+### Teams and API
+
+- Organizations with viewer, member, admin and owner roles, invitations and an audit log.
+- Passkeys and TOTP two-factor authentication.
+- A REST API described by OpenAPI, with scoped keys, idempotency keys and rate limits.
+
+### Plans
+
+- Free, Pro and Team plans with a usage page, email alerts at 80 % and 100 %, and Stripe billing.
+- Marketing site, documentation, a status page and an administration area for instance operators.

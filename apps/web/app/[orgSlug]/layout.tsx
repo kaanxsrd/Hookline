@@ -27,6 +27,7 @@ export default async function OrgLayout({
         name: session.user.name,
         email: session.user.email,
         image: session.user.image ?? null,
+        isAdmin: session.user.isAdmin,
       }}
       appHost={new URL(env().APP_URL).host}
     >

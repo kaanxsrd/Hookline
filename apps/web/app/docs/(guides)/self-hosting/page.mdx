@@ -1,0 +1,50 @@
+export const metadata = {
+  title: "Self-hosting",
+  description: "Run Hookline on your own infrastructure and administer the instance.",
+};
+
+# Self-hosting
+
+Hookline is open source under the MIT license, and the hosted service runs the same code you can run yourself.
+
+## What runs
+
+| Process    | Does                                                                            |
+| ---------- | ------------------------------------------------------------------------------- |
+| **web**    | This site, the dashboard, sign-in and the REST API (Next.js)                     |
+| **edge**   | Webhook intake on `/h/*`, live streams and CLI tunnels on `/v1/*` (Go)            |
+| **worker** | Forwarding with retries, replays, retention and usage rollups (Go)               |
+
+They need PostgreSQL 17, Redis 7 and S3-compatible object storage for bodies over 64 KiB, plus an SMTP server for email. A reverse proxy such as Caddy sends `/h/*` and `/v1/*` to the edge and everything else to the web app, all on one domain.
+
+Everything is configured with environment variables. `.env.example` in the repository lists them with development values. Production images and deployment guides ship with the first release. Until then, the [repository](https://github.com/kaanxsrd/hookline) explains how to run everything locally.
+
+## Lifting plan limits
+
+A private instance usually wants no limits at all. Set this on the web app, edge and worker:
+
+```sh
+PLAN_OVERRIDE=unlimited
+```
+
+Billing stays off unless `STRIPE_SECRET_KEY` is set. Without billing, administrators can assign Free, Pro or Team to individual organizations.
+
+## Administrators
+
+Instance administrators can open **/admin**, which is hidden from everyone else. Make someone an administrator once they have an account:
+
+```sh
+bun run admin:grant you@example.com
+```
+
+Administrators can then promote others from the admin area. The admin area provides:
+
+- **Overview:** accounts, organizations, endpoints and requests across the instance, plus recent sign-ups.
+- **Users:** search accounts, see their organizations, and disable or re-enable them. Disabling signs the user out everywhere and revokes the API keys they created, including CLI logins.
+- **Organizations:** see members, endpoints and usage, and assign a plan when billing is off. A plan change takes effect at once and the organization's owners are emailed.
+- **Endpoints:** find any endpoint by slug or name, including temporary ones, and disable abusive ones with a reason. Disabled endpoints answer `410 endpoint_disabled`, and their owners cannot turn them back on.
+- **Audit log:** every administrator action, with who did it and when.
+
+## Status page
+
+[`/status`](/status) shows whether intake, forwarding, the database and live updates are working. It probes the edge's `/readyz` at `EDGE_INTERNAL_URL`, and the worker counts as running while it holds its job-queue leadership lease. Results are cached for 30 seconds.

@@ -63,6 +63,39 @@ export type AuditTarget = {
 };
 
 /**
+ * An instance administrator (`user.is_admin`, read from the database on every
+ * call). Everyone else gets NOT_FOUND, so the admin area's existence never
+ * leaks. Successful mutations are audited as instance-level entries (no org).
+ */
+export const adminProcedure = authedProcedure.use(async ({ ctx, meta, next, type, path }) => {
+  const [row] = await ctx.db
+    .select({ isAdmin: schema.user.isAdmin, disabledAt: schema.user.disabledAt })
+    .from(schema.user)
+    .where(eq(schema.user.id, ctx.user.id));
+  if (!row?.isAdmin || row.disabledAt) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Not found." });
+  }
+
+  const target: AuditTarget = {};
+  const result = await next({
+    ctx: { ...ctx, audit: (details: AuditTarget) => Object.assign(target, details) },
+  });
+
+  if (result.ok && type === "mutation" && !meta?.skipAudit) {
+    await writeAudit(ctx.db, {
+      orgId: null,
+      actorUserId: ctx.user.id,
+      action: meta?.audit ?? path,
+      targetType: target.type ?? null,
+      targetId: target.id ?? null,
+      metadata: target.metadata ?? {},
+      ip: ctx.ip,
+    });
+  }
+  return result;
+});
+
+/**
  * A member of the organization named by `orgSlug` with at least `meta.role`
  * (viewer by default). Every successful mutation is written to the audit
  * log; handlers describe the target with `ctx.audit(...)`.

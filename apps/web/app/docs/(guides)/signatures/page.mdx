@@ -1,0 +1,42 @@
+export const metadata = {
+  title: "Signature verification",
+  description: "Check that captured webhooks really came from Stripe, GitHub, Shopify and others.",
+};
+
+# Signature verification
+
+Most webhook senders sign their requests. Give Hookline the secret and it checks every request when it is captured, so you can tell a real event from a forged or corrupted one.
+
+## Setting it up
+
+In an endpoint's settings, choose the provider and paste the secret. Use **Test against the latest request** to check the secret before you save it. Secrets are stored encrypted and never shown again.
+
+Each request is then marked:
+
+- **Verified:** the signature matches.
+- **Invalid:** the signature is missing, malformed, outside the time tolerance or does not match. The inbox says which.
+- **Unchecked:** no provider or secret is set.
+
+Hookline never rejects a request because of its signature. The sender always gets the endpoint's configured response, so you can inspect even the requests that fail.
+
+## Providers
+
+| Provider          | Secret                                  | Headers checked                                              | Timestamp tolerance |
+| ----------------- | --------------------------------------- | ------------------------------------------------------------ | ------------------- |
+| Stripe            | Endpoint signing secret (`whsec_…`)     | `Stripe-Signature`                                           | 5 minutes           |
+| GitHub            | Webhook secret                          | `X-Hub-Signature-256`                                        | none                |
+| Shopify           | App client secret                       | `X-Shopify-Hmac-Sha256`                                      | none                |
+| Slack             | Signing secret                          | `X-Slack-Signature`, `X-Slack-Request-Timestamp`             | 5 minutes           |
+| Standard Webhooks | Signing secret (`whsec_…`)              | `webhook-id`, `webhook-timestamp`, `webhook-signature` (or `svix-*`) | 5 minutes   |
+| Discord           | Application public key (hex)            | `X-Signature-Ed25519`, `X-Signature-Timestamp`               | none                |
+| HMAC-SHA256       | Shared secret                           | The first of `X-Signature`, `X-Signature-256`, `X-Hub-Signature-256`, `X-Webhook-Signature`, `X-Hmac-Signature` | none |
+
+The generic **HMAC-SHA256** provider covers the many senders that sign the raw body with HMAC-SHA256. It accepts hex or base64 signatures, with or without a `sha256=` prefix.
+
+## Testing with signed events
+
+`hookline trigger` sends sample events signed with the endpoint's secret, so they show up as verified:
+
+```sh
+hookline trigger <slug> github.push
+```

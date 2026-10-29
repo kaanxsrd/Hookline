@@ -1,0 +1,44 @@
+export const metadata = {
+  title: "Security",
+  description: "How Hookline protects the webhooks it captures, and how to report a vulnerability.",
+};
+
+# Security
+
+Webhooks carry tokens, email addresses and payment data. Hookline is built on the assumption that every captured request is sensitive. This page describes what the software does to protect it. The code is open source, so you can check all of it.
+
+## Reporting a vulnerability
+
+Please **do not open a public issue**. Report it privately through [GitHub's private vulnerability reporting](https://github.com/kaanxsrd/hookline/security/advisories/new). We acknowledge reports within 3 business days and send an assessment with a planned fix date within 10 business days. Good-faith research that avoids privacy violations, data destruction and service disruption will not lead to legal action. The full policy is in [SECURITY.md](https://github.com/kaanxsrd/hookline/blob/main/SECURITY.md).
+
+## Captured data
+
+- **Masked by default.** Authorization, cookies, signatures, tokens, secrets and HMAC headers are masked in the dashboard and the API. Revealing them needs the member role, and every reveal is written to the organization's audit log.
+- **Rendered as text only.** Bodies are never rendered as HTML in the dashboard, and downloads are always served as `application/octet-stream` attachments with a sandboxing Content Security Policy.
+- **Deleted on schedule.** Each endpoint keeps requests for its retention period, capped by the plan. Requests are stored in daily partitions that are dropped as a whole, and large bodies in object storage go with them.
+- **Unguessable URLs.** Endpoint URLs carry 12 random base62 characters. Temporary endpoints created without an account can only be viewed by the browser that created them, and they expire after 24 hours.
+
+## Secrets
+
+- **Passwords** are hashed with scrypt. Accounts can add passkeys and TOTP two-factor authentication with backup codes.
+- **API keys** are shown once. Only their SHA-256 hash and an 8-character prefix are stored, and each key carries only the scopes it was given.
+- **Signing secrets** for signature verification and for signing forwarded requests are encrypted with AES-256-GCM. Each envelope is bound to its row, so it cannot be copied to another one, and the encryption keys can be rotated.
+
+## Intake
+
+Responses from webhook URLs are configured by whoever owns the endpoint, so every one of them carries `Content-Security-Policy: sandbox`, `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`. Configured responses cannot set cookies, security policies, CORS or framing headers. Intake is rate limited per endpoint and per source address, and body sizes are capped by the plan.
+
+## Forwarding
+
+Destinations and replays never reach internal networks. Every address a destination resolves to is checked at the moment of connection, which also stops DNS rebinding. Redirects are not followed, and proxies from the environment are ignored. Forwarded requests can be signed with Standard Webhooks so your server can check that they came from Hookline.
+
+## The dashboard
+
+- Sessions are `httpOnly`, `SameSite=Lax` cookies, and requests are checked against the app's origin to stop cross-site request forgery.
+- Every page is served with a nonce-based Content Security Policy, `frame-ancestors 'none'`, `nosniff` and a strict referrer policy.
+- Sign-in, sign-up, password resets and two-factor checks are rate limited.
+- Organizations have four roles (viewer, member, admin and owner). People outside an organization cannot tell it exists. Every change made inside an organization is recorded in its audit log.
+
+## Operations
+
+Logs never contain query strings, header values or bodies. Hookline is free of third-party analytics, trackers and fonts: everything the dashboard loads comes from its own origin.
