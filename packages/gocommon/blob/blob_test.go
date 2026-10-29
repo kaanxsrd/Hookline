@@ -108,3 +108,21 @@ func TestKey(t *testing.T) {
 		"dates are UTC")
 	assert.Equal(t, "anonymous/"+ep.String()+"/2026/03/05/"+req.String(), blob.Key(nil, ep, req, at))
 }
+
+func TestList(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+	for _, k := range []string{"a/1", "a/2", "b/1"} {
+		require.NoError(t, s.Put(ctx, k, []byte("x"), ""))
+	}
+	page, err := s.List(ctx, "", 2)
+	require.NoError(t, err)
+	require.Len(t, page, 2)
+	assert.Equal(t, "a/1", page[0].Key)
+	assert.False(t, page[0].LastModified.IsZero())
+
+	rest, err := s.List(ctx, page[1].Key, 10)
+	require.NoError(t, err)
+	require.Len(t, rest, 1)
+	assert.Equal(t, "b/1", rest[0].Key)
+}

@@ -29,6 +29,8 @@ type RequestSummary struct {
 	SignatureStatus string    `json:"signature_status"`
 	ResponseStatus  int       `json:"response_status"`
 	ReceivedAt      time.Time `json:"received_at"`
+	// Statuses of the deliveries created for the request, in order.
+	Deliveries []string `json:"deliveries,omitempty"`
 }
 
 // Event is one message on an endpoint channel.

@@ -36,6 +36,8 @@ export type InboxSource = {
   get: (id: string, reveal: boolean) => Promise<Detail | null>;
   streamAccess: () => Promise<StreamAccess>;
   remove?: ((id: string) => Promise<void>) | undefined;
+  /** Sends a delivery's request to its destination again (members only). */
+  retryDelivery?: ((deliveryId: string) => Promise<void>) | undefined;
   bodyUrl: (id: string) => string;
   permalink?: ((id: string) => string) | undefined;
   canReveal: boolean;
@@ -238,6 +240,21 @@ export function Inbox({ source, initial, since, initialSelectedId, onResync }: P
         downloadUrl={source.bodyUrl(detail.data.id)}
         permalink={source.permalink?.(detail.data.id)}
         canReveal={source.canReveal}
+        onRetryDelivery={
+          source.retryDelivery
+            ? async (deliveryId) => {
+                try {
+                  await source.retryDelivery?.(deliveryId);
+                  toast.success("Retry queued");
+                  queryClient.invalidateQueries({
+                    queryKey: ["inbox-detail", source.key, detail.data?.id],
+                  });
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Could not retry");
+                }
+              }
+            : undefined
+        }
         onReveal={async () => {
           if (selectedId) setRevealed((s) => new Set(s).add(selectedId));
         }}

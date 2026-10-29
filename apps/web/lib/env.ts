@@ -29,6 +29,13 @@ const schema = z.object({
     .transform((v) => v === "true"),
   /** "unlimited" on self-hosted instances lifts every plan limit. */
   PLAN_OVERRIDE: z.enum(["", "unlimited"]).default(""),
+  /** kid:base64key[,kid:base64key...]: encrypts destination signing secrets (shared with the worker). */
+  DATA_ENCRYPTION_KEY: z.string().min(1),
+  /** Lets destinations target loopback and private networks. Self-hosted development only. */
+  ALLOW_PRIVATE_DESTINATIONS: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
   /** Signs SSE stream tokens; the edge verifies them with the same secret. */
   STREAM_TOKEN_SECRET: z.string().min(32),
   /** Addresses exempt from the anonymous-endpoint daily cap (development and tests only). */

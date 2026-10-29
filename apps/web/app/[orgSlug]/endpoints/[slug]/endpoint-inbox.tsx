@@ -48,6 +48,11 @@ export function EndpointInbox(props: Props) {
             await client.request.delete.mutate({ orgSlug, endpointSlug, id });
           }
         : undefined,
+      retryDelivery: canDelete
+        ? async (id: string) => {
+            await client.delivery.retry.mutate({ orgSlug, id });
+          }
+        : undefined,
       bodyUrl: (id) => `/api/orgs/${orgSlug}/endpoints/${endpointSlug}/requests/${id}/body`,
       permalink: (id) => `${appUrl}/${orgSlug}/endpoints/${endpointSlug}/requests/${id}`,
       canReveal,

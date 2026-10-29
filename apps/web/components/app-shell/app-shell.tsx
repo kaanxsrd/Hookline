@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Menu, Search, Settings, Webhook } from "lucide-react";
+import { LayoutDashboard, Menu, Search, Send, Settings, Webhook } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
@@ -80,6 +80,7 @@ function SidebarContent({
   const nav = [
     { href: base, label: "Overview", icon: LayoutDashboard, exact: true },
     { href: `${base}/endpoints`, label: "Endpoints", icon: Webhook },
+    { href: `${base}/deliveries`, label: "Deliveries", icon: Send },
     {
       href: `${base}/settings/general`,
       label: "Settings",

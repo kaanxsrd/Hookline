@@ -22,13 +22,18 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/riverqueue/river"
 
 	"github.com/kaanxsrd/hookline/packages/gocommon/blob"
 	"github.com/kaanxsrd/hookline/packages/gocommon/clientip"
 	"github.com/kaanxsrd/hookline/packages/gocommon/dbq"
+	"github.com/kaanxsrd/hookline/packages/gocommon/destfilter"
 	"github.com/kaanxsrd/hookline/packages/gocommon/entitlements"
 	"github.com/kaanxsrd/hookline/packages/gocommon/httpx"
+	"github.com/kaanxsrd/hookline/packages/gocommon/jobs"
 	"github.com/kaanxsrd/hookline/packages/gocommon/logging"
 	"github.com/kaanxsrd/hookline/services/edge/internal/counters"
 	"github.com/kaanxsrd/hookline/services/edge/internal/endpoints"
@@ -46,10 +51,13 @@ type EndpointSource interface {
 	Lookup(ctx context.Context, slug string) (endpoints.Endpoint, error)
 }
 
-// Deps are the handler's collaborators. Limiter, Blobs, Publisher and
-// Counters may be nil: the corresponding feature is then disabled.
+// Deps are the handler's collaborators. Limiter, Blobs, Publisher, Counters
+// and Jobs may be nil: the corresponding feature is then disabled.
 type Deps struct {
-	Queries   *dbq.Queries
+	Pool    *pgxpool.Pool
+	Queries *dbq.Queries
+	// Jobs enqueues deliveries in the intake transaction (insert-only client).
+	Jobs      *river.Client[pgx.Tx]
 	Endpoints EndpointSource
 	Limiter   *ratelimit.Limiter
 	Blobs     blob.Store
@@ -217,7 +225,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	duration := float32(h.Now().Sub(start).Seconds() * 1000)
 	params.DurationMs = &duration
-	if err := h.insert(ctx, params); err != nil {
+	deliveries, err := h.insert(ctx, params, destfilter.Request{Method: r.Method, Headers: headerPairs(r), Body: body})
+	if err != nil {
 		h.Logger.ErrorContext(ctx, "store request", "error", err)
 		if params.BodyS3Key != nil {
 			_ = h.Blobs.Delete(context.WithoutCancel(ctx), *params.BodyS3Key)
@@ -229,7 +238,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.Counters != nil {
 		h.Counters.Add(ep.ID, receivedAt)
 	}
-	h.publish(ctx, ep, params, ip.String())
+	h.publish(ctx, ep, params, ip.String(), deliveries)
 	h.Metrics.IntakeBytes.Add(float64(len(body)))
 	h.Metrics.IntakeDuration.WithLabelValues("captured").Observe(h.Now().Sub(start).Seconds())
 
@@ -245,22 +254,71 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	respond(w, ep)
 }
 
-// insert stores the request row, creating a missing daily partition once:
+// insert stores the request row and, in the same transaction, one delivery
+// and one River job per matching destination, so a captured request and its
+// forwarding can never diverge. A missing daily partition is created once:
 // the worker keeps partitions 7 days ahead, so this only happens if it has
-// been down for a week or the clock jumped.
-func (h *Handler) insert(ctx context.Context, p dbq.InsertRequestParams) error {
-	err := h.Queries.InsertRequest(ctx, p)
+// been down for a week or the clock jumped. It returns the statuses of the
+// deliveries created.
+func (h *Handler) insert(ctx context.Context, p dbq.InsertRequestParams, req destfilter.Request) ([]string, error) {
+	deliveries, err := h.insertTx(ctx, p, req)
 	if !isMissingPartition(err) {
-		return err
+		return deliveries, err
 	}
 	day := p.ReceivedAt.UTC().Truncate(24 * time.Hour)
 	if _, perr := h.Queries.EnsureRequestPartitions(ctx, dbq.EnsureRequestPartitionsParams{
 		FromDay: day.AddDate(0, 0, -1), ToDay: day.AddDate(0, 0, 7),
 	}); perr != nil {
-		return fmt.Errorf("create missing partition: %w", perr)
+		return nil, fmt.Errorf("create missing partition: %w", perr)
 	}
 	h.Logger.WarnContext(ctx, "created missing request partitions", "day", day.Format(time.DateOnly))
-	return h.Queries.InsertRequest(ctx, p)
+	return h.insertTx(ctx, p, req)
+}
+
+func (h *Handler) insertTx(ctx context.Context, p dbq.InsertRequestParams, req destfilter.Request) ([]string, error) {
+	tx, err := h.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	q := h.Queries.WithTx(tx)
+
+	if err := q.InsertRequest(ctx, p); err != nil {
+		return nil, err
+	}
+	var deliveries []string
+	if h.Jobs != nil {
+		dests, err := q.ListEnabledDestinations(ctx, p.EndpointID)
+		if err != nil {
+			return nil, fmt.Errorf("list destinations: %w", err)
+		}
+		for _, d := range dests {
+			filter, err := destfilter.Parse(d.Filter)
+			if err != nil {
+				h.Logger.WarnContext(ctx, "skipping destination with an invalid filter", "destination_id", d.ID, "error", err)
+				continue
+			}
+			if !filter.Match(req) {
+				continue
+			}
+			id, err := q.InsertDelivery(ctx, dbq.InsertDeliveryParams{
+				RequestID:         p.ID,
+				RequestReceivedAt: p.ReceivedAt,
+				DestinationID:     d.ID,
+				EndpointID:        p.EndpointID,
+				OrgID:             p.OrgID,
+				Trigger:           dbq.DeliveryTriggerAuto,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("insert delivery: %w", err)
+			}
+			if _, err := h.Jobs.InsertTx(ctx, tx, jobs.DeliverArgs{DeliveryID: id}, nil); err != nil {
+				return nil, fmt.Errorf("enqueue delivery: %w", err)
+			}
+			deliveries = append(deliveries, string(dbq.DeliveryStatusPending))
+		}
+	}
+	return deliveries, tx.Commit(ctx)
 }
 
 func isMissingPartition(err error) bool {
@@ -268,7 +326,7 @@ func isMissingPartition(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23514" && strings.Contains(pgErr.Message, "no partition of relation")
 }
 
-func (h *Handler) publish(ctx context.Context, ep endpoints.Endpoint, p dbq.InsertRequestParams, ip string) {
+func (h *Handler) publish(ctx context.Context, ep endpoints.Endpoint, p dbq.InsertRequestParams, ip string, deliveries []string) {
 	if h.Publisher == nil {
 		return
 	}
@@ -281,6 +339,7 @@ func (h *Handler) publish(ctx context.Context, ep endpoints.Endpoint, p dbq.Inse
 		SignatureStatus: string(p.SignatureStatus),
 		ResponseStatus:  ep.ResponseStatus,
 		ReceivedAt:      p.ReceivedAt,
+		Deliveries:      deliveries,
 	}
 	if p.ContentType != nil {
 		s.ContentType = *p.ContentType

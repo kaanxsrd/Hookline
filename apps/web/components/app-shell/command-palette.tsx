@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Copy, LayoutDashboard, Moon, Plus, Settings, Webhook } from "lucide-react";
+import { Copy, LayoutDashboard, Moon, Plus, Send, Settings, Webhook } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
@@ -111,6 +111,9 @@ export function CommandPalette({
           </CommandItem>
           <CommandItem onSelect={() => run(() => router.push(`${base}/endpoints`))}>
             <Webhook aria-hidden /> Endpoints
+          </CommandItem>
+          <CommandItem onSelect={() => run(() => router.push(`${base}/deliveries`))}>
+            <Send aria-hidden /> Deliveries
           </CommandItem>
           <CommandItem onSelect={() => run(() => router.push(`${base}/settings/general`))}>
             <Settings aria-hidden /> Settings

@@ -85,6 +85,16 @@ In development the web app and the edge are different origins; the stream answer
 - **Claiming a temporary endpoint:** the visitor's httpOnly cookie proves ownership. Claiming moves the endpoint and its captured requests into the organization, removes the expiry and view token, and invalidates the edge's cache.
 - **Content Security Policy** (`apps/web/proxy.ts`): a per-request nonce with `strict-dynamic` for scripts (the theme script carries the nonce); `style-src 'unsafe-inline'`, because component libraries position elements with inline style attributes; `connect-src` adds the edge origin for SSE in development; `frame-ancestors 'none'`. The proxy also redirects requests without a session cookie to sign-in before rendering; pages still verify the session on the server.
 
+## Forwarding
+
+1. **Enqueue.** When intake stores a request it evaluates each enabled destination's filter (`gocommon/destfilter`) and, in the same transaction, inserts a `delivery` row and a River `deliver` job per match. A crash can never leave a request without its deliveries, or a job without its row. Manual retries and tests from the web app insert their rows and jobs in one transaction too, using River's own insert and `LISTEN/NOTIFY` wake-up (`apps/web/lib/jobs.ts`).
+2. **Deliver** (`services/worker/internal/deliver`). The worker loads the delivery, its destination and the request (body from PostgreSQL or S3), and sends it through `gocommon/safehttp`: every resolved address is checked at dial time, so DNS rebinding cannot reach internal networks; redirects are not followed and environment proxies are ignored. Each attempt is stored in `delivery_attempt`.
+3. **Retry.** Retryable outcomes (network errors, timeouts, 408, 429, 5xx) snooze the River job with full-jitter exponential backoff (10 s × 2ⁿ, at most 6 h) or the server's `Retry-After`; the delivery's own attempt counter, not River's, decides when to give up. Other client errors fail immediately.
+4. **Announce.** Each status change is published on `ep:{endpointId}` as a `delivery` event, which the edge fans out to open inboxes.
+5. **Maintenance.** The same River client runs periodic jobs on its elected leader only, so any number of worker processes can run.
+
+Signing secrets for Standard Webhooks are stored as AES-256-GCM envelopes (`hlenc:v1:<kid>:…`) under `DATA_ENCRYPTION_KEY`, with the destination ID as associated data so an envelope cannot be moved to another row. The first key encrypts; older keys keep decrypting, so keys can rotate.
+
 ## Data model notes
 
 - **IDs** are UUIDv7 everywhere, from a `uuidv7()` SQL default (PostgreSQL 17 has none built in) or from the application when the timestamp must be chosen.

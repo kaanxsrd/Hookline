@@ -1,4 +1,8 @@
-import { CircleAlert, CircleCheck, Clock, Repeat } from "lucide-react";
+"use client";
+
+import { CircleAlert, CircleCheck, Clock, Repeat, RotateCcw } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DeliveryDetail } from "./types";
 
@@ -14,7 +18,14 @@ const statusStyle = {
 } as const;
 
 /** Every delivery of a request and each attempt, oldest first. */
-export function DeliveriesTimeline({ deliveries }: { deliveries: DeliveryDetail[] }) {
+export function DeliveriesTimeline({
+  deliveries,
+  onRetry,
+}: {
+  deliveries: DeliveryDetail[];
+  onRetry?: ((deliveryId: string) => Promise<void>) | undefined;
+}) {
+  const [retrying, setRetrying] = useState<string | null>(null);
   if (deliveries.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
@@ -41,6 +52,24 @@ export function DeliveriesTimeline({ deliveries }: { deliveries: DeliveryDetail[
               <span className="text-muted-foreground ml-auto truncate font-mono text-xs">
                 {d.destination_url}
               </span>
+              {onRetry && d.status !== "pending" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7"
+                  disabled={retrying !== null}
+                  onClick={async () => {
+                    setRetrying(d.id);
+                    try {
+                      await onRetry(d.id);
+                    } finally {
+                      setRetrying(null);
+                    }
+                  }}
+                >
+                  <RotateCcw aria-hidden /> Retry
+                </Button>
+              )}
             </div>
             <ol className="border-border ml-2 grid gap-3 border-l pl-4">
               {d.attempts.map((a) => (

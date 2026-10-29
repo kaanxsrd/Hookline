@@ -64,7 +64,7 @@ func newEnv(t *testing.T) *env {
 	trusted, _ := clientip.ParseTrusted(clientip.DefaultTrusted)
 	handler := server.New(logging.Discard(), server.Routes{
 		Intake: intake.New(intake.Deps{
-			Queries: q, Endpoints: endpoints.NewCache(q, rdb, "", logging.Discard()),
+			Pool: pool, Queries: q, Endpoints: endpoints.NewCache(q, rdb, "", logging.Discard()),
 			Publisher: live.NewPublisher(rdb), IPs: clientip.New(trusted), Metrics: m, Logger: logging.Discard(),
 		}),
 		Stream: &stream.Handler{

@@ -33,6 +33,7 @@ type Props = {
   canReveal: boolean;
   onReveal: () => Promise<void>;
   onDelete?: (() => Promise<void>) | undefined;
+  onRetryDelivery?: ((deliveryId: string) => Promise<void>) | undefined;
 };
 
 export function copyable(detail: Detail): CopyableRequest {
@@ -64,6 +65,7 @@ export function RequestDetail({
   canReveal,
   onReveal,
   onDelete,
+  onRetryDelivery,
 }: Props) {
   const [revealing, setRevealing] = useState(false);
 
@@ -183,7 +185,7 @@ export function RequestDetail({
             )}
           </TabsContent>
           <TabsContent value="deliveries">
-            <DeliveriesTimeline deliveries={detail.deliveries_detail} />
+            <DeliveriesTimeline deliveries={detail.deliveries_detail} onRetry={onRetryDelivery} />
           </TabsContent>
           <TabsContent value="meta">
             <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">

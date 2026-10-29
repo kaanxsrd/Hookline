@@ -25,7 +25,15 @@ type Store interface {
 	Put(ctx context.Context, key string, body []byte, contentType string) error
 	Get(ctx context.Context, key string) (io.ReadCloser, error)
 	Delete(ctx context.Context, keys ...string) error
+	// List returns up to max objects whose keys sort after `after`, in key order.
+	List(ctx context.Context, after string, max int) ([]Object, error)
 	Ping(ctx context.Context) error
+}
+
+// Object is a stored object's key and age.
+type Object struct {
+	Key          string
+	LastModified time.Time
 }
 
 // Key is the object key of a request body:
@@ -120,6 +128,23 @@ func (s *S3) Delete(ctx context.Context, keys ...string) error {
 		}
 	}
 	return nil
+}
+
+// List returns up to max objects after the given key.
+func (s *S3) List(ctx context.Context, after string, max int) ([]Object, error) {
+	in := &s3.ListObjectsV2Input{Bucket: aws.String(s.bucket), MaxKeys: aws.Int32(int32(min(max, 1000)))} //nolint:gosec // bounded by min
+	if after != "" {
+		in.StartAfter = aws.String(after)
+	}
+	out, err := s.client.ListObjectsV2(ctx, in)
+	if err != nil {
+		return nil, fmt.Errorf("blob list: %w", err)
+	}
+	objects := make([]Object, 0, len(out.Contents))
+	for _, o := range out.Contents {
+		objects = append(objects, Object{Key: aws.ToString(o.Key), LastModified: aws.ToTime(o.LastModified)})
+	}
+	return objects, nil
 }
 
 // EnsureBucket creates the bucket when it does not exist yet. Self-hosted

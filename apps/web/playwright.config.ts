@@ -4,8 +4,8 @@ const ci = Boolean(process.env.CI);
 
 /**
  * End-to-end tests against a real stack: Docker infrastructure (Postgres,
- * Redis, MinIO) must be up and migrated. Playwright starts the edge and the
- * web app, or reuses ones already running locally (`bun run dev`).
+ * Redis, MinIO) must be up and migrated. Playwright starts the edge, the
+ * worker and the web app, or reuses ones already running locally (`bun run dev`).
  */
 export default defineConfig({
   testDir: "./e2e",
@@ -28,6 +28,13 @@ export default defineConfig({
       command: "bun scripts/with-env.ts go run ./services/edge",
       cwd: "../..",
       url: "http://localhost:8080/healthz",
+      reuseExistingServer: !ci,
+      timeout: 180_000,
+    },
+    {
+      command: "bun scripts/with-env.ts go run ./services/worker",
+      cwd: "../..",
+      url: "http://localhost:8081/healthz",
       reuseExistingServer: !ci,
       timeout: 180_000,
     },

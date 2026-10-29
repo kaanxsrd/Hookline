@@ -16,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/redis/go-redis/v9"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -60,7 +62,11 @@ func newEnv(t *testing.T) *env {
 	require.NoError(t, err)
 	e := &env{t: t, pool: pool, mr: mr, rdb: rdb, blobs: blob.NewMemory(), metrics: metrics.New()}
 	e.counters = counters.New(q, logging.Discard(), time.Hour)
+	jobClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
+	require.NoError(t, err)
 	h := intake.New(intake.Deps{
+		Pool:      pool,
+		Jobs:      jobClient,
 		Queries:   q,
 		Endpoints: endpoints.NewCache(q, rdb, "", logging.Discard()),
 		Limiter:   ratelimit.New(rdb, ratelimit.Rule{Rate: 1000, Burst: 1000}),
@@ -454,4 +460,40 @@ func TestEndpointCacheServesFromRedis(t *testing.T) {
 	val, err := e.mr.Get(endpoints.CacheKey("unknown12345"))
 	require.NoError(t, err)
 	assert.Equal(t, "-", val, "misses are cached briefly")
+}
+
+func TestMatchingDestinationsGetDeliveriesAndJobs(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	epID := e.endpoint(endpointOpts{})
+	_, err := e.pool.Exec(t.Context(), `
+		INSERT INTO destination (endpoint_id, name, url, filter, enabled) VALUES
+		  ($1, 'all', 'https://example.com/a', '{}', true),
+		  ($1, 'only GET', 'https://example.com/b', '{"methods":["GET"]}', true),
+		  ($1, 'paid only', 'https://example.com/c', '{"json_path_equals":{"type":"order.paid"}}', true),
+		  ($1, 'disabled', 'https://example.com/d', '{}', false)`, epID)
+	require.NoError(t, err)
+
+	w := e.send(http.MethodPost, "/h/abcdefABCDEF", strings.NewReader(`{"type":"order.paid"}`), nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	reqID := uuid.MustParse(w.Header().Get(httpx.RequestIDHeader))
+
+	rows, err := e.pool.Query(t.Context(), `
+		SELECT dst.name, d.status, d.trigger FROM delivery d JOIN destination dst ON dst.id = d.destination_id
+		WHERE d.request_id = $1 ORDER BY dst.name`, reqID)
+	require.NoError(t, err)
+	var got []string
+	for rows.Next() {
+		var name, status, trigger string
+		require.NoError(t, rows.Scan(&name, &status, &trigger))
+		got = append(got, name+":"+status+":"+trigger)
+	}
+	require.NoError(t, rows.Err())
+	assert.Equal(t, []string{"all:pending:auto", "paid only:pending:auto"}, got)
+
+	var jobs int
+	require.NoError(t, e.pool.QueryRow(t.Context(), `
+		SELECT count(*) FROM river_job WHERE kind = 'deliver' AND queue = 'deliveries'
+		  AND (args->>'delivery_id')::uuid IN (SELECT id FROM delivery WHERE request_id = $1)`, reqID).Scan(&jobs))
+	assert.Equal(t, 2, jobs, "one job per delivery, inserted in the intake transaction")
 }

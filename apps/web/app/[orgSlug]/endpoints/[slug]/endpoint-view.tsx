@@ -1,5 +1,5 @@
 import { uuidv7 } from "@hookline/db";
-import { Route, Settings } from "lucide-react";
+import { Route, Send, Settings } from "lucide-react";
 import Link from "next/link";
 import { CopyButton } from "@/components/copy-button";
 import { EndpointStatusBadge } from "@/components/status-badge";
@@ -35,6 +35,11 @@ export async function EndpointView({
           <EndpointStatusBadge status={endpoint.status} />
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`${base}/destinations`}>
+              <Send aria-hidden /> Destinations
+            </Link>
+          </Button>
           <Button variant="outline" size="sm" asChild>
             <Link href={`${base}/settings`}>
               <Settings aria-hidden /> Settings

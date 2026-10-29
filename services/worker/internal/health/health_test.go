@@ -1,6 +1,8 @@
 package health_test
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,14 +14,24 @@ import (
 )
 
 func TestHandler(t *testing.T) {
-	h := health.Handler(logging.Discard())
+	var readyErr error
+	h := health.Handler(logging.Discard(), func(context.Context) error { return readyErr })
 
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	get := func(path string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		return rec
+	}
+
+	rec := get("/healthz")
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.JSONEq(t, `{"status":"ok"}`, rec.Body.String())
 
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/other", nil))
-	assert.Equal(t, http.StatusNotFound, rec.Code)
+	assert.Equal(t, http.StatusOK, get("/readyz").Code)
+	readyErr = errors.New("db down")
+	rec = get("/readyz")
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "db down")
+
+	assert.Equal(t, http.StatusNotFound, get("/other").Code)
 }

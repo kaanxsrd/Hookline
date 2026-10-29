@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kaanxsrd/hookline/packages/gocommon/blob"
@@ -83,11 +85,19 @@ func run() error {
 		logger.WarnContext(ctx, "S3_BUCKET is not set; bodies over 64 KiB will be rejected")
 	}
 
+	// Insert-only River client: the worker runs the jobs.
+	jobClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{Logger: logger})
+	if err != nil {
+		return fmt.Errorf("river client: %w", err)
+	}
+
 	m := metrics.New()
 	ctrs := counters.New(queries, logger, time.Second)
 	intakeRules := entitlements.Intake()
 	handler := intake.New(intake.Deps{
+		Pool:      pool,
 		Queries:   queries,
+		Jobs:      jobClient,
 		Endpoints: endpoints.NewCache(queries, rdb, cfg.PlanOverride, logger),
 		Limiter:   ratelimit.New(rdb, ratelimit.Rule{Rate: intakeRules.PerIPRatePerSecond, Burst: intakeRules.PerIPBurst}),
 		Blobs:     blobs,
