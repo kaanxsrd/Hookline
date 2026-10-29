@@ -36,6 +36,13 @@
       "when": 1793266244874,
       "tag": "0004_response_status_2xx",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793269744271,
+      "tag": "0005_auth_rate_limit",
+      "breakpoints": true
     }
   ]
 }

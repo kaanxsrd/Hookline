@@ -74,6 +74,17 @@ Dashboards receive requests live over Server-Sent Events from `GET /v1/stream/{e
 
 In development the web app and the edge are different origins; the stream answers with `Access-Control-Allow-Origin` set to `APP_URL`'s origin. The token travels in the query string because `EventSource` cannot send headers.
 
+## Authentication and authorization
+
+- **Better Auth** (`apps/web/lib/auth.ts`) handles email and password with required verification, passkeys (WebAuthn), TOTP two-factor with backup codes, organizations, invitations and email changes. Its tables live in the Drizzle schema with UUIDv7 IDs. Sessions are httpOnly, `SameSite=Lax` cookies (`hookline.session_token`), and Better Auth's origin checks protect against CSRF.
+- **Roles:** `viewer < member < admin < owner`, defined once in `apps/web/lib/permissions.ts` and used in two places: by Better Auth's access control for its own organization endpoints, and as ranks by the tRPC middleware.
+- **tRPC** (`apps/web/server`): `orgProcedure` resolves the caller's membership from `orgSlug` and answers 404 to non-members, so an organization's existence never leaks. It enforces `meta.role` and writes an audit-log entry for every successful mutation; handlers describe the target with `ctx.audit(...)`. Member and invitation changes go through tRPC, which calls Better Auth server-side, so they are audited with the real actor.
+- **Plan limits** are checked where an action happens: endpoint creation and claiming (endpoint count), and invitations (members, through a Better Auth `beforeCreateInvitation` hook).
+- **Email:** React Email templates rendered by Nodemailer (Mailpit locally). Messages whose timing could reveal whether an account exists (password resets) are sent without blocking the response.
+- **Account safety:** a disabled user cannot create sessions. Deleting an account is refused while the user is the only owner of an organization that has other members; organizations they are alone in are deleted with them.
+- **Claiming a temporary endpoint:** the visitor's httpOnly cookie proves ownership. Claiming moves the endpoint and its captured requests into the organization, removes the expiry and view token, and invalidates the edge's cache.
+- **Content Security Policy** (`apps/web/proxy.ts`): a per-request nonce with `strict-dynamic` for scripts (the theme script carries the nonce); `style-src 'unsafe-inline'`, because component libraries position elements with inline style attributes; `connect-src` adds the edge origin for SSE in development; `frame-ancestors 'none'`. The proxy also redirects requests without a session cookie to sign-in before rendering; pages still verify the session on the server.
+
 ## Data model notes
 
 - **IDs** are UUIDv7 everywhere, from a `uuidv7()` SQL default (PostgreSQL 17 has none built in) or from the application when the timestamp must be chosen.

@@ -10,6 +10,8 @@ const ci = Boolean(process.env.CI);
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
+  // The dev server compiles routes on demand; too many workers starve it.
+  workers: ci ? 2 : 3,
   forbidOnly: ci,
   retries: ci ? 1 : 0,
   reporter: ci ? [["github"], ["html", { open: "never" }]] : "list",

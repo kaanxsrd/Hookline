@@ -6,6 +6,7 @@
  */
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   index,
@@ -177,3 +178,11 @@ export const invitation = pgTable(
     check("invitation_role_check", sql`${t.role} IN ('viewer', 'member', 'admin')`),
   ],
 );
+
+/** Better Auth's rate-limit counters (rateLimit.storage = "database"), shared by every web instance. */
+export const rateLimit = pgTable("rate_limit", {
+  id: id(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+});

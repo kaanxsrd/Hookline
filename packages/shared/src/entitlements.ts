@@ -9,9 +9,11 @@ export { anonymousRules, intakeRules, plans };
 
 export type Plan = keyof typeof plans;
 export type PaidPlan = "free" | "pro" | "team";
-export type Limits = { name: string } & {
-  [K in Exclude<keyof (typeof plans)["free"], "name">]: number | null;
-};
+/** Never null: scripts/lib/plans.ts rejects a plans.json without them. */
+type RequiredLimit = "retention_hours" | "max_body_bytes";
+export type Limits = { name: string } & Record<RequiredLimit, number> & {
+    [K in Exclude<keyof (typeof plans)["free"], "name" | RequiredLimit>]: number | null;
+  };
 
 export const paidPlans: readonly PaidPlan[] = ["free", "pro", "team"];
 

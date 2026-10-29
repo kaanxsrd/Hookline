@@ -27,6 +27,15 @@ Tables with an `updated_at` column need a `hookline_set_updated_at` trigger in t
 
 Database tests need Docker. TypeScript tests create a throwaway database on the server in `DATABASE_URL` (the compose Postgres by default). Go tests start PostgreSQL with testcontainers, or use the server in `TEST_DATABASE_URL` when set; packages that use `dbtest` need `func TestMain(m *testing.M) { os.Exit(dbtest.Run(m)) }`.
 
+## End-to-end tests
+
+```sh
+docker compose up -d && bun run db:migrate
+bun run test:e2e
+```
+
+Playwright starts the edge and the web app, or reuses the ones `bun run dev` already runs. Tests read emails from Mailpit, so the compose stack must be up. CI runs the same suite against the production build.
+
 ## Before you open a pull request
 
 ```sh

@@ -779,6 +779,13 @@ type Passkey struct {
 	CreatedAt    time.Time
 }
 
+type RateLimit struct {
+	ID          uuid.UUID
+	Key         string
+	Count       int32
+	LastRequest int64
+}
+
 type Request struct {
 	ID              uuid.UUID
 	ReceivedAt      time.Time

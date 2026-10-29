@@ -7,6 +7,18 @@ const schema = z.object({
   /** Public base URL of the edge (intake). Same as APP_URL behind Caddy; :8080 in development. */
   EDGE_PUBLIC_URL: z.url().optional(),
   DATABASE_URL: z.string().min(1),
+  REDIS_URL: z.string().min(1).default("redis://localhost:6380/0"),
+  /** Signs Better Auth sessions and tokens. */
+  BETTER_AUTH_SECRET: z.string().min(32),
+  SMTP_URL: z.string().min(1).default("smtp://localhost:1025"),
+  MAIL_FROM: z.string().min(3).default("Hookline <no-reply@hookline.localhost>"),
+  /** Better Auth's sign-in/sign-up rate limits. Only development and tests turn them off. */
+  AUTH_RATE_LIMIT_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+  /** "unlimited" on self-hosted instances lifts every plan limit. */
+  PLAN_OVERRIDE: z.enum(["", "unlimited"]).default(""),
   /** Signs SSE stream tokens; the edge verifies them with the same secret. */
   STREAM_TOKEN_SECRET: z.string().min(32),
   /** Addresses exempt from the anonymous-endpoint daily cap (development and tests only). */

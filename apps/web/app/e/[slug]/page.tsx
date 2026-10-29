@@ -1,4 +1,4 @@
-import { schema } from "@hookline/db";
+import { schema, uuidv7 } from "@hookline/db";
 import { and, desc, eq, gte } from "drizzle-orm";
 import { Clock } from "lucide-react";
 import type { Metadata } from "next";
@@ -82,7 +82,13 @@ export default async function AnonymousInboxPage({ params, searchParams }: Props
         </details>
       </header>
 
-      <LiveInbox slug={slug} shareToken={shareToken} initial={rows.map(toSummary)} />
+      <LiveInbox
+        slug={slug}
+        shareToken={shareToken}
+        isCreator={shareToken === undefined}
+        initial={rows.map(toSummary)}
+        since={uuidv7(new Date(Date.now() - 60_000))}
+      />
     </main>
   );
 }

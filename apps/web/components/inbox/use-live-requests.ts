@@ -15,6 +15,12 @@ export type StreamAccess = {
 type Options = {
   /** Requests already rendered, newest first. */
   initial: RequestSummary[];
+  /**
+   * A UUIDv7 from shortly before the page rendered. When `initial` is empty
+   * it is the resume point, so requests arriving before the stream connects
+   * are replayed rather than lost.
+   */
+  since: string;
   /** Fetches a fresh stream URL and token (they expire after five minutes). */
   getAccess: () => Promise<StreamAccess>;
   /** Called when the server says too many events were missed to replay. */
@@ -36,7 +42,7 @@ const TOKEN_REUSE_MARGIN_MS = 60_000;
  * exponential backoff with jitter; the edge replays what was missed. Tokens
  * are reused while they are fresh, so a reconnect is a single request.
  */
-export function useLiveRequests({ initial, getAccess, onResync, limit = 500 }: Options) {
+export function useLiveRequests({ initial, since, getAccess, onResync, limit = 500 }: Options) {
   const [requests, setRequests] = useState(initial);
   const [status, setStatus] = useState<LiveStatus>("connecting");
 
@@ -45,7 +51,7 @@ export function useLiveRequests({ initial, getAccess, onResync, limit = 500 }: O
   const resync = useRef(onResync);
   access.current = getAccess;
   resync.current = onResync;
-  const lastId = useRef(initial[0]?.id);
+  const lastId = useRef(initial[0]?.id ?? since);
 
   useEffect(() => {
     let source: EventSource | null = null;

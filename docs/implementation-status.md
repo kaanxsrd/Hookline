@@ -12,7 +12,7 @@ Legend: ✅ done · 🚧 partially done (see note) · ⬜ not started
 | 2   | Database                         | ✅     |
 | 3   | Intake                           | ✅     |
 | 4   | Live stream                      | ✅     |
-| 5   | Auth & orgs                      | ⬜     |
+| 5   | Auth & orgs                      | ✅     |
 | 6   | Inbox                            | ⬜     |
 | 7   | Destinations & worker            | ⬜     |
 | 8   | CLI & tunnel                     | ⬜     |
@@ -44,7 +44,7 @@ Legend: ✅ done · 🚧 partially done (see note) · ⬜ not started
 | Root scripts `db:*`, `gen`                                         | ✅     | Added in milestone 2                                                                                                                                |
 | Root script `test:e2e`                                             | ✅     | Added in milestone 4 (Playwright)                                                                                                                   |
 | Root script `loadtest`                                             | ⬜     | Milestone 13                                                                                                                                        |
-| Strict CSP                                                         | ⬜     | Needs per-request nonces in the Next.js proxy; milestone 5. Other security headers are set now                                                      |
+| Strict CSP                                                         | ✅     | Nonce-based, set by `apps/web/proxy.ts` (milestone 5)                                                                                               |
 | Local `go test -race` on Windows                                   | 🚧     | `-race` needs cgo and a C compiler; `scripts/go.ts` adds it whenever one is available and warns otherwise. CI always runs with `-race`              |
 
 ## 2. Database
@@ -107,6 +107,29 @@ Legend: ✅ done · 🚧 partially done (see note) · ⬜ not started
 | Go tests                                | ✅     | Authorization, concurrent viewers sharing one Redis subscription, resume without duplicates, resync past 500, pings, shutdown, lagging viewers                                                                                                                          |
 | Known noise                             | 🚧     | `next-themes` logs a React 19 "script tag" warning in development; revisited with the app shell in milestone 5                                                                                                                                                          |
 
-## 5–14
+## 5. Auth & orgs
+
+| Feature                              | Status | Notes                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Email and password with verification | ✅     | `/sign-up`, `/verify-email` (with resend), verification link signs in; 10–256 character passwords; Mailpit locally                                                                                                                                                                                     |
+| Password reset                       | ✅     | `/forgot-password` (same answer whether or not the account exists), `/reset-password` revokes other sessions                                                                                                                                                                                           |
+| Passkeys                             | ✅     | Add and remove on `/account`; "Sign in with a passkey" on `/sign-in`; Playwright covers it with a virtual authenticator                                                                                                                                                                                |
+| TOTP two-factor and backup codes     | ✅     | Set up with a QR code or key on `/account`; `/two-factor` accepts TOTP or backup codes and can trust the device for 30 days; regenerate codes and turn off with the password; e2e-tested with a real TOTP                                                                                              |
+| Organizations, roles, invitations    | ✅     | Better Auth organization plugin with viewer/member/admin/owner; invitation emails; `/invite/[id]` to accept or decline; owners only can grant ownership                                                                                                                                                |
+| Onboarding                           | ✅     | Create the organization (slug validated, reserved words refused), then create the first endpoint from a template or keep the temporary one, then the URL and CLI instructions                                                                                                                          |
+| App shell                            | ✅     | Sidebar (Overview, Endpoints, Settings), organization switcher with "new organization", user menu (account, theme, sign out), ⌘K command palette (jump to or copy an endpoint, create an endpoint, toggle theme, navigate), mobile sheet. Deliveries and Usage are added with their milestones (7, 11) |
+| Endpoint CRUD                        | ✅     | List with search and sort, create from a template, inbox page (live), settings (name, description, pause/resume, type-to-confirm delete). Plan endpoint limit enforced; the edge cache is invalidated on change                                                                                        |
+| Claiming anonymous endpoints         | ✅     | "Sign up to keep it" banner, then claim during onboarding; requests move with the endpoint                                                                                                                                                                                                             |
+| Role checks                          | ✅     | tRPC `orgProcedure` with `meta.role`; non-members get 404; UI hides what a role cannot do                                                                                                                                                                                                              |
+| Audit log                            | ✅     | Automatic for every org mutation plus organization creation; `/[org]/settings/audit-log` with action filter, pagination and CSV export (formula-injection safe)                                                                                                                                        |
+| `/account`                           | ✅     | Profile and email change (approved from the current address), password, passkeys, two-factor, sessions with revoke, account deletion that never orphans an organization                                                                                                                                |
+| Members page                         | ✅     | Invite with a role, change roles, remove, cancel pending invitations; plan member limit enforced                                                                                                                                                                                                       |
+| Organization settings                | ✅     | Rename, change URL, delete (owner, type-to-confirm)                                                                                                                                                                                                                                                    |
+| Better Auth rate limits              | ✅     | Database-backed, strict on sign-in, sign-up, resets and 2FA; `AUTH_RATE_LIMIT_ENABLED=false` only in development and tests                                                                                                                                                                             |
+| CSP and security headers             | ✅     | See docs/architecture.md                                                                                                                                                                                                                                                                               |
+| Tests                                | ✅     | Playwright: sign-up → verify → onboarding → endpoint → live requests; claim a temporary endpoint; Free-plan seat limit, invite a viewer who then cannot create endpoints or read the audit log; 2FA sign-in; passkey sign-in; auth redirect. Vitest: roles, slugs, stream tokens, helpers              |
+| `user.is_admin` area                 | ⬜     | Milestone 12                                                                                                                                                                                                                                                                                           |
+
+## 6–14
 
 Not started. Each section is filled in as its milestone lands.
