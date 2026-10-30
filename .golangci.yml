@@ -1,7 +1,8 @@
 version: "2"
 
 run:
-  timeout: 5m
+  # CI lints five modules in parallel with the tests on two cores; cold caches are slow.
+  timeout: 10m
 
 linters:
   default: standard
