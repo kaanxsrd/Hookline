@@ -83,6 +83,11 @@ func (c *Config) Save() error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
+	// MkdirAll leaves an existing directory as it was; the API key's directory
+	// must not stay readable by others (a no-op beyond read-only on Windows).
+	if err := os.Chmod(filepath.Dir(p), 0o700); err != nil { //nolint:gosec // a directory needs the x bit; owner-only
+		return err
+	}
 	b, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err

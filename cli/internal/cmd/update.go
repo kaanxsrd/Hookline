@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -53,7 +52,8 @@ func newer(latest, current [3]int) bool {
 
 // upgradeHint guesses how the binary was installed from where it lives.
 func upgradeHint(exe string) string {
-	p := strings.ToLower(filepath.ToSlash(exe))
+	// Backslashes too, not only on Windows: filepath.ToSlash is a no-op elsewhere.
+	p := strings.ToLower(strings.ReplaceAll(exe, `\`, "/"))
 	switch {
 	case strings.Contains(p, "/cellar/") || strings.Contains(p, "/caskroom/") ||
 		strings.Contains(p, "/homebrew/") || strings.Contains(p, "/linuxbrew/"):

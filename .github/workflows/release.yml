@@ -35,7 +35,9 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.work
+          # Latest 1.27 patch: older ones have standard-library vulnerabilities.
+          go-version: "1.27.x"
+          check-latest: true
           cache-dependency-path: "**/go.sum"
 
       - uses: goreleaser/goreleaser-action@v7
