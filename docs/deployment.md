@@ -6,7 +6,7 @@ Configuration is entirely through environment variables. `.env.example` lists ev
 - [Backups and restores](#backups-and-restores)
 - [Upgrades](#upgrades)
 - [Fly.io](#flyio)
-- [Vercel and Railway](#vercel-and-railway)
+- [Railway](#railway) (and Vercel)
 - [Releases](#releases)
 - [Load testing](#load-testing)
 - [Email](#email), [billing with Stripe](#billing-with-stripe) and [plan limits](#plan-limits)
@@ -101,38 +101,35 @@ fly certs add hooks.example.com --app hookline-edge
 
 The web app sends HSTS itself when `APP_URL` is `https://`. The browser's live stream connects to the edge origin, which the Content Security Policy allows through `EDGE_PUBLIC_URL`.
 
-## Vercel and Railway
+## Railway
 
-The web app runs on Vercel; the edge, the worker, PostgreSQL and Redis run on Railway, where they talk over Railway's free private network. As with Fly.io, the edge gets its own hostname (for example `hooks.example.com`).
+Everything can run in one Railway project, on Railway's private network: the web app, the edge, the worker, PostgreSQL and Redis. As with Fly.io, the edge gets its own hostname (for example `hooks.example.com`) because Railway routes by host, not path.
 
-**Railway** (one project, one region, ideally the one closest to your Vercel region):
+1. **Project and stores.** Create a project, then add **PostgreSQL** and **Redis** from Railway's templates, all in one region. Hookline's migrations run on PostgreSQL 17 and 18. Redis only holds caches, rate-limit buckets and pub/sub, so give it a cap and no persistence: in its start command, replace `--save 60 1` with `--save '' --appendonly no --maxmemory 64mb --maxmemory-policy allkeys-lru`.
+2. **Services.** Add four empty services that build the root `Dockerfile`. Railway cannot pick a Dockerfile stage, so each one sets `HOOKLINE_TARGET`, which Railway passes to the build:
 
-1. Add **PostgreSQL** and **Redis** from Railway's templates. Enable public networking (TCP proxy) on both: Vercel reaches them over the internet.
-2. Give Redis a small memory cap and no persistence; it only holds caches, rate-limit buckets and pub/sub. Set its start command to `redis-server --save "" --appendonly no --maxmemory 64mb --maxmemory-policy volatile-lru --requirepass $REDIS_PASSWORD`.
-3. Add three services from the GitHub repository, all building the root `Dockerfile`. Set each one's config file (Settings → Config-as-code) and its `HOOKLINE_TARGET` variable, which Railway passes to the build:
+   | Service   | `HOOKLINE_TARGET` | Settings                                                                                 | Domain              |
+   | --------- | ----------------- | ---------------------------------------------------------------------------------------- | ------------------- |
+   | `web`     | `web`             | Healthcheck `/api/readyz`, restart on failure, `PORT=3000`                               | App domain → 3000   |
+   | `edge`    | `edge`            | Healthcheck `/readyz`, restart on failure, draining 30 s, `EDGE_ADDR=:8080`, `PORT=8080` | Hooks domain → 8080 |
+   | `worker`  | `worker`          | Restart on failure, draining 30 s                                                        | None                |
+   | `migrate` | `migrate`         | Restart policy **never**: it applies migrations and exits                                | None                |
 
-   | Service   | Config file                   | `HOOKLINE_TARGET` | Networking                        |
-   | --------- | ----------------------------- | ----------------- | --------------------------------- |
-   | `edge`    | `deploy/railway/edge.json`    | `edge`            | Public domain → port 8080         |
-   | `worker`  | `deploy/railway/worker.json`  | `worker`          | None                              |
-   | `migrate` | `deploy/railway/migrate.json` | `migrate`         | None; runs migrations, then exits |
+3. **Variables.** Every service except `migrate` gets `APP_URL`, `EDGE_PUBLIC_URL`, `DATA_ENCRYPTION_KEY`, `STREAM_TOKEN_SECRET`, the SMTP and S3 settings, `LOG_FORMAT=json` and `CLIENT_IP_HEADER=x-real-ip`. Each service uses the private URLs `DATABASE_URL=${{Postgres.DATABASE_URL}}` and `REDIS_URL=${{Redis.REDIS_URL}}`; the web app adds `?family=0` to the Redis URL (so ioredis resolves Railway's IPv6 private addresses), `BETTER_AUTH_SECRET`, `DATABASE_POOL_MAX=5` and `EDGE_INTERNAL_URL=http://edge.railway.internal:8080`.
+4. **Deploy** in this order: `migrate` (its logs end with "Migrations applied."), then the edge, the worker and the web app. Connect the services to the GitHub repository for deploys on push (Railway's GitHub app needs access to it), or deploy the checkout with `railway up --service <name>`; `.railwayignore` keeps `.env*` files out of the upload.
+5. **Domains.** Add both custom domains and create the CNAME and `_railway-verify` TXT records Railway shows. `/status` should then report every component as operational.
 
-4. Put the common settings (`APP_URL`, `EDGE_PUBLIC_URL`, `DATA_ENCRYPTION_KEY`, `STREAM_TOKEN_SECRET`, SMTP, S3, `LOG_FORMAT=json`) in shared variables, and per service `DATABASE_URL=${{Postgres.DATABASE_URL}}` and `REDIS_URL=${{Redis.REDIS_URL}}` (private URLs). The edge also needs `EDGE_ADDR=:8080` and `PORT=8080`.
-5. Add the edge's custom domain and point a CNAME at it. After the first webhook, check that the inbox shows the sender's address. If it shows a `100.64.x.x` address, Railway's proxy is not trusted yet: set `TRUSTED_PROXIES` to the default ranges plus `100.64.0.0/10`.
+**Client addresses.** Railway's proxy ends `X-Forwarded-For` with the public address of its own edge server and sets `X-Real-Ip` to the sender, replacing any value the sender sent. `CLIENT_IP_HEADER=x-real-ip` makes the edge and the web app use it for requests from trusted proxies; without it, every sender would share one per-IP rate-limit bucket and one sign-in limit.
 
-**Vercel:** import the repository with **Root Directory** `apps/web` (Vercel detects Next.js and Bun). `apps/web/vercel.json` pins the functions to `fra1` and skips builds when only Go code changed. Set the web app's variables, with `DATABASE_URL` and `REDIS_URL` from the Postgres and Redis **public** URLs (add `?sslmode=require` to the database URL), `DATABASE_POOL_MAX=3`, and `EDGE_INTERNAL_URL` set to the edge's public URL. Then add the app's domain. Background emails use `after()`, so Vercel keeps a function alive until they are sent.
-
-**Order:** Postgres and Redis, then `migrate` (check its logs say "Migrations applied."), then the edge and worker, then Vercel. On later pushes Railway redeploys only the services whose watch paths changed; `migrate` reruns when `packages/db` changes.
-
-**Keeping Railway cheap.** Railway bills for the CPU and memory a service actually uses, for volume storage and for egress; builds and private networking are free.
+**Keeping Railway cheap.** Railway bills for the CPU and memory services actually use, for volumes and for egress; builds and private networking are free.
 
 - The Go services idle at a few tens of MB. `GOMEMLIMIT=96MiB` keeps them from growing, and `EDGE_DB_MAX_CONNS=8` and `WORKER_DELIVERY_CONCURRENCY=10` fit a small instance (raise them under real load).
-- Never put the edge to sleep: webhook senders do not retry forever. The `migrate` service costs nothing between deploys because it exits.
-- Keep everything in one region and use the private URLs between Railway services. Only the dashboard's queries from Vercel cross the internet.
+- Never put the edge to sleep: webhook senders do not retry forever. `migrate` costs nothing between deploys because it exits.
+- Keep every service in one region and use the private URLs; nothing needs Railway's public TCP proxies.
 - Retention keeps the database small: the worker deletes requests past each endpoint's retention, and the Free plan keeps 24 hours.
 - Put bodies over 64 KiB in Cloudflare R2 (no egress fees, free tier) instead of a bucket on Railway, or leave `S3_BUCKET` empty to reject them.
 
-**Things to know.** Vercel's Hobby plan is for non-commercial use only, so a service that charges needs Vercel Pro. Railway's TCP proxy does not encrypt Redis traffic: the password and cache keys cross the internet between Vercel and Railway. Running the web app on Railway too (target `web`, port 3000) avoids both, keeps all traffic private and usually costs less than Vercel Pro.
+**The web app on Vercel instead.** Import the repository with Root Directory `apps/web`; `apps/web/vercel.json` pins functions to `fra1` and skips builds when only Go code changed. Enable Railway's TCP proxies on Postgres and Redis and use their public URLs (`?sslmode=require` on the database URL), `DATABASE_POOL_MAX=3`, `EDGE_INTERNAL_URL` set to the edge's public URL, and `CLIENT_IP_HEADER` unset (Vercel sets `X-Forwarded-For` to the client). Background emails use `after()`, so Vercel keeps a function alive until they are sent. Vercel's Hobby plan is for non-commercial use, and Redis traffic through Railway's TCP proxy is not encrypted.
 
 **Email** works with any SMTP provider. Microsoft 365 (`smtp.office365.com:587`) needs SMTP AUTH turned on for the mailbox; the URL is `smtp://user%40domain:password@smtp.office365.com:587` (the `@` in the user name becomes `%40`), and `MAIL_FROM` must be that mailbox or one it may send as. Both the web app and the worker support the `LOGIN` mechanism Microsoft 365 requires.
 

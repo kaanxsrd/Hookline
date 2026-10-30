@@ -123,7 +123,7 @@ func run() error {
 		Tunnels:   &tunnel.Relay{RDB: rdb, Responses: responseHub},
 		Quota:     &quota.Quota{RDB: rdb, Queries: queries, Now: time.Now},
 		Counters:  ctrs,
-		IPs:       clientip.New(cfg.TrustedProxies),
+		IPs:       clientip.New(cfg.TrustedProxies).WithHeader(cfg.ClientIPHeader),
 		Secrets:   cfg.Secrets,
 		Metrics:   m,
 		Logger:    logger,

@@ -1,0 +1,12 @@
+# Never upload secrets or build output with `railway up` (in addition to .gitignore).
+.env
+.env.*
+!.env.example
+node_modules
+**/node_modules
+**/.next
+.tools
+.turbo
+dist
+**/test-results
+**/playwright-report

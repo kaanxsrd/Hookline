@@ -9,6 +9,7 @@ import { organization, twoFactor } from "better-auth/plugins";
 import { and, count, eq, gt, ne } from "drizzle-orm";
 import { ChangeEmail, Invitation, ResetPassword, VerifyEmail } from "@/emails/auth-emails";
 import { writeAudit } from "./audit";
+import { clientIpHeader } from "./client-ip";
 import { getDb } from "./db";
 import { env } from "./env";
 import { sendEmailInBackground } from "./mail";
@@ -139,8 +140,8 @@ function createAuth() {
       useSecureCookies: appUrl.protocol === "https:",
       defaultCookieAttributes: { sameSite: "lax", httpOnly: true },
       database: { generateId: () => uuidv7() },
-      // Caddy sets X-Forwarded-For to the client address (see lib/client-ip.ts).
-      ipAddress: { ipAddressHeaders: ["x-forwarded-for"] },
+      // The proxy's client header (CLIENT_IP_HEADER) or X-Forwarded-For (see lib/client-ip.ts).
+      ipAddress: { ipAddressHeaders: [clientIpHeader() ?? "x-forwarded-for"] },
     },
     databaseHooks: {
       session: {

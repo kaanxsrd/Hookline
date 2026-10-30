@@ -18,6 +18,7 @@ const DefaultTrusted = "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0
 // Resolver extracts client addresses.
 type Resolver struct {
 	trusted []netip.Prefix
+	header  string
 }
 
 // ParseTrusted parses a comma-separated list of CIDR prefixes or single addresses.
@@ -46,14 +47,30 @@ func New(trusted []netip.Prefix) *Resolver {
 	return &Resolver{trusted: trusted}
 }
 
+// WithHeader returns a Resolver that, behind a trusted proxy, takes the
+// client address from header (e.g. X-Real-Ip on Railway). Use it only when
+// the platform's proxy always sets that header itself: some platforms append
+// their own edge servers to X-Forwarded-For from public addresses that cannot
+// be listed as trusted.
+func (rs *Resolver) WithHeader(header string) *Resolver {
+	return &Resolver{trusted: rs.trusted, header: header}
+}
+
 // From returns the client address of r: the TCP peer, unless the peer is a
-// trusted proxy, in which case X-Forwarded-For is walked from right to left
-// and the first address outside the trusted ranges wins. The zero Addr is
-// returned when nothing parses.
+// trusted proxy, in which case the configured header (if any) wins, and
+// otherwise X-Forwarded-For is walked from right to left and the first
+// address outside the trusted ranges wins. The zero Addr is returned when
+// nothing parses.
 func (rs *Resolver) From(r *http.Request) netip.Addr {
 	peer := parseHostPort(r.RemoteAddr)
 	if !peer.IsValid() || !rs.isTrusted(peer) {
 		return peer
+	}
+	if rs.header != "" {
+		first, _, _ := strings.Cut(r.Header.Get(rs.header), ",")
+		if a, err := netip.ParseAddr(strings.TrimSpace(first)); err == nil {
+			return a.Unmap()
+		}
 	}
 
 	client := peer

@@ -56,3 +56,28 @@ func TestParseTrusted(t *testing.T) {
 	_, err = clientip.ParseTrusted("10.0.0.0/8,not-an-ip")
 	require.ErrorContains(t, err, "not-an-ip")
 }
+
+func TestFromHeader(t *testing.T) {
+	trusted, err := clientip.ParseTrusted(clientip.DefaultTrusted)
+	require.NoError(t, err)
+	rs := clientip.New(trusted).WithHeader("X-Real-Ip")
+
+	req := func(remote, realIP, xff string) *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "/", nil)
+		r.RemoteAddr = remote
+		if realIP != "" {
+			r.Header.Set("X-Real-Ip", realIP)
+		}
+		if xff != "" {
+			r.Header.Set("X-Forwarded-For", xff)
+		}
+		return r
+	}
+	// Railway: the trusted internal proxy sets X-Real-Ip; XFF ends with a public edge address.
+	assert.Equal(t, "212.60.107.194", rs.From(req("[fd12::1]:4000", "212.60.107.194", "212.60.107.194, 152.233.12.241")).String())
+	// A public peer cannot choose its address through the header.
+	assert.Equal(t, "203.0.113.7", rs.From(req("203.0.113.7:5555", "6.6.6.6", "")).String())
+	// Without a usable header, X-Forwarded-For is walked as before.
+	assert.Equal(t, "198.51.100.9", rs.From(req("10.0.0.2:1234", "garbage", "198.51.100.9")).String())
+	assert.Equal(t, "198.51.100.9", rs.From(req("10.0.0.2:1234", "", "198.51.100.9")).String())
+}

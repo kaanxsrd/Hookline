@@ -4,16 +4,21 @@
     "builder": "DOCKERFILE",
     "dockerfilePath": "Dockerfile",
     "watchPatterns": [
-      "services/worker/**",
-      "packages/gocommon/**",
-      "go.work",
-      "go.work.sum",
+      "apps/web/**",
+      "packages/shared/**",
+      "packages/db/src/**",
+      "config/**",
+      "api/**",
+      "bun.lock",
+      "package.json",
       "Dockerfile"
     ]
   },
   "deploy": {
+    "healthcheckPath": "/api/readyz",
+    "healthcheckTimeout": 60,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
-    "drainingSeconds": 30
+    "drainingSeconds": 15
   }
 }

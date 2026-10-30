@@ -35,6 +35,7 @@ type Config struct {
 	AppOrigin         string // origin of APP_URL, allowed to open SSE streams cross-origin
 
 	TrustedProxies []netip.Prefix    // TRUSTED_PROXIES: proxies whose X-Forwarded-For is believed
+	ClientIPHeader string            // CLIENT_IP_HEADER: header a trusted proxy sets to the client address (e.g. X-Real-Ip)
 	PlanOverride   entitlements.Plan // PLAN_OVERRIDE: "unlimited" on self-hosted instances
 
 	// DATA_ENCRYPTION_KEY: "kid:base64key[,...]", decrypts endpoint signature secrets.
@@ -93,5 +94,6 @@ func Load(l *config.Loader) (Config, error) {
 		l.Fail("TRUSTED_PROXIES", "%v", err)
 	}
 	c.TrustedProxies = trusted
+	c.ClientIPHeader = l.String("CLIENT_IP_HEADER", "")
 	return c, l.Err()
 }
