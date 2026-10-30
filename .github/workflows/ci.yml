@@ -18,8 +18,9 @@ jobs:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # TypeScript database tests use this server; Go tests start their own
-    # PostgreSQL through testcontainers.
+    # TypeScript and Go database tests share this server. Go test packages run
+    # in parallel; starting a testcontainers PostgreSQL in each raced on the
+    # runner's Docker daemon ("No such container").
     services:
       postgres:
         image: postgres:17.11-alpine
@@ -34,6 +35,7 @@ jobs:
           --health-interval 2s --health-timeout 3s --health-retries 30
     env:
       DATABASE_URL: postgres://hookline:hookline@localhost:5433/hookline
+      TEST_DATABASE_URL: postgres://hookline:hookline@localhost:5433/postgres
     steps:
       - uses: actions/checkout@v7
 
