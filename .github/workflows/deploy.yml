@@ -1,0 +1,153 @@
+name: Deploy
+
+# Deploys main to Railway after CI passes on it. Only services whose sources
+# changed since the last successful deploy are rebuilt; migrations always run
+# first, so the new code never starts against an old schema.
+#
+# Needs secrets.RAILWAY_TOKEN: a Railway project token for the production
+# environment (Railway → project → Settings → Tokens).
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      all:
+        description: Redeploy every service
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # moves the deployed/production tag
+
+# One deploy at a time, never cancelled halfway.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  RAILWAY_CLI_VERSION: 5.71.0
+
+jobs:
+  deploy:
+    name: Railway (production)
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: production
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+          fetch-depth: 0
+
+      - name: Check the Railway token
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "::error::Set the RAILWAY_TOKEN secret (a Railway project token for production)."
+            exit 1
+          fi
+
+      # Only the newest successful commit deploys; an older run that finishes late is skipped.
+      - name: Skip superseded commits
+        id: latest
+        run: |
+          git fetch --quiet origin main
+          if [ "$(git rev-parse origin/main)" != "$SHA" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "main has moved past $SHA; its own CI run will deploy it."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Work out what changed
+        id: changes
+        if: steps.latest.outputs.skip != 'true'
+        run: |
+          base=$(git rev-parse -q --verify refs/tags/deployed/production || true)
+          if [ -z "$base" ] || [ "${{ inputs.all }}" = "true" ]; then
+            echo "No previous deploy recorded (or a full redeploy was asked for): deploying everything."
+            files="*"
+          else
+            files=$(git diff --name-only "$base" "$SHA")
+          fi
+          changed() {
+            [ "$files" = "*" ] && return 0
+            printf '%s\n' "$files" | grep -Eq "$1"
+          }
+          shared='^(Dockerfile|\.dockerignore|go\.work|go\.work\.sum)$'
+          gocommon='^packages/(gocommon|protocol)/'
+          changed "$shared|^packages/db/migrations/|^packages/db/(src|scripts)/|^packages/db/package\.json$" && echo "migrate=true" >> "$GITHUB_OUTPUT"
+          changed "$shared|$gocommon|^services/edge/" && echo "edge=true" >> "$GITHUB_OUTPUT"
+          changed "$shared|$gocommon|^services/worker/" && echo "worker=true" >> "$GITHUB_OUTPUT"
+          changed "$shared|^apps/web/|^packages/(shared|db)/|^config/|^api/|^bun\.lock$|^package\.json$" && echo "web=true" >> "$GITHUB_OUTPUT"
+          printf 'Changed since the last deploy:\n%s\n' "$files" | head -50
+
+      - name: Install the Railway CLI
+        if: steps.latest.outputs.skip != 'true'
+        run: npm install -g "@railway/cli@${RAILWAY_CLI_VERSION}" --allow-scripts=@railway/cli
+
+      - name: Migrate
+        if: steps.changes.outputs.migrate == 'true'
+        run: |
+          railway up --service migrate --ci --message "migrate ${SHA::7}"
+          # The container exits once migrations are applied; wait for it and check it worked.
+          for i in $(seq 1 60); do
+            status=$(railway service status --service migrate 2>/dev/null | awk '/Status:/ {print $2}')
+            case "$status" in
+              STOPPED|SUCCESS|REMOVED) break ;;
+              FAILED|CRASHED) echo "::error::migrate ended with $status"; railway logs --service migrate --lines 50 || true; exit 1 ;;
+            esac
+            sleep 5
+          done
+          railway logs --service migrate --lines 30 | tee migrate.log
+          grep -q "Migrations applied." migrate.log || { echo "::error::migrations did not report success"; exit 1; }
+
+      - name: Deploy services
+        if: steps.latest.outputs.skip != 'true'
+        env:
+          DEPLOY_EDGE: ${{ steps.changes.outputs.edge }}
+          DEPLOY_WORKER: ${{ steps.changes.outputs.worker }}
+          DEPLOY_WEB: ${{ steps.changes.outputs.web }}
+        run: |
+          pids=()
+          for svc in edge worker web; do
+            flag="DEPLOY_${svc^^}"
+            if [ "${!flag}" = "true" ]; then
+              echo "Deploying $svc"
+              railway up --service "$svc" --ci --message "$svc ${SHA::7}" > "deploy-$svc.log" 2>&1 &
+              pids+=("$!:$svc")
+            else
+              echo "Skipping $svc (unchanged)"
+            fi
+          done
+          failed=0
+          for entry in "${pids[@]}"; do
+            pid=${entry%%:*}; svc=${entry#*:}
+            if wait "$pid"; then
+              echo "✓ $svc deployed"
+            else
+              echo "::error::$svc failed to deploy"; tail -40 "deploy-$svc.log"; failed=1
+            fi
+          done
+          exit $failed
+
+      - name: Smoke test
+        if: steps.latest.outputs.skip != 'true'
+        run: |
+          for url in https://hookline.vante.app/api/readyz https://hooks.vante.app/readyz; do
+            for i in $(seq 1 12); do
+              if curl -fsS -m 10 "$url" > /dev/null; then echo "✓ $url"; continue 2; fi
+              sleep 10
+            done
+            echo "::error::$url is not ready"; exit 1
+          done
+
+      - name: Record the deployed commit
+        if: steps.latest.outputs.skip != 'true'
+        run: |
+          git tag -f deployed/production "$SHA"
+          git push -f origin refs/tags/deployed/production
