@@ -159,7 +159,9 @@ describe("seed", () => {
       deliveriesCreated: 0,
     });
     expect(await counts()).toEqual(before);
-  });
+    // Two seeds hash passwords with scrypt (deliberately slow) and insert
+    // hundreds of rows: well past Bun's 5 s default on a busy CI runner.
+  }, 60_000);
 
   test("seeded admin can sign in with the seed password", async () => {
     const [row] = await database.db
