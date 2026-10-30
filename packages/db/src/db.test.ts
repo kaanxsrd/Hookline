@@ -63,10 +63,11 @@ describe("migrations", () => {
   });
 
   test("uuidv7() produces version 7 UUIDs in time order", async () => {
-    const [a, b] = [
-      await scalar<string>(sql`SELECT uuidv7()`),
-      await scalar<string>(sql`SELECT uuidv7()`),
-    ];
+    const a = await scalar<string>(sql`SELECT uuidv7()`);
+    // The fallback for PostgreSQL < 18 orders by millisecond only: two calls in
+    // the same millisecond compare randomly.
+    await Bun.sleep(2);
+    const b = await scalar<string>(sql`SELECT uuidv7()`);
     expect(a.charAt(14)).toBe("7");
     expect(a.charAt(19)).toMatch(/^[89ab]$/);
     expect(a < b).toBe(true);
