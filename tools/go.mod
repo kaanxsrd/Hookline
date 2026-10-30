@@ -7,6 +7,7 @@ tool (
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 	github.com/riverqueue/river/cmd/river
+	golang.org/x/vuln/cmd/govulncheck
 )
 
 require (
@@ -268,4 +269,6 @@ require (
 	github.com/speakeasy-api/jsonpath v0.6.3 // indirect
 	github.com/speakeasy-api/openapi v1.24.0 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
+	golang.org/x/telemetry v0.0.0-20261010193011-f71dc92da45e // indirect
+	golang.org/x/vuln v1.9.0 // indirect
 )

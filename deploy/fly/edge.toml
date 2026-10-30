@@ -1,0 +1,40 @@
+# Hookline edge (intake, live streams, CLI tunnels) on Fly.io.
+#   fly deploy --config deploy/fly/edge.toml --app <your edge app>
+app = "hookline-edge"
+primary_region = "fra"
+
+[build]
+  image = "ghcr.io/kaanxsrd/hookline-edge:latest"
+
+[env]
+  LOG_FORMAT = "json"
+  EDGE_ADDR = ":8080"
+  EDGE_METRICS_ADDR = ":9090"
+
+# Streams and tunnels hold connections open: never stop machines under them.
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  min_machines_running = 2
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 2000
+    hard_limit = 2500
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/readyz"
+    interval = "10s"
+    timeout = "3s"
+    grace_period = "10s"
+
+# Fly scrapes Prometheus metrics from the internal port.
+[metrics]
+  port = 9090
+  path = "/metrics"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

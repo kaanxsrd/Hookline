@@ -55,7 +55,8 @@ func newer(latest, current [3]int) bool {
 func upgradeHint(exe string) string {
 	p := strings.ToLower(filepath.ToSlash(exe))
 	switch {
-	case strings.Contains(p, "/cellar/") || strings.Contains(p, "/homebrew/") || strings.Contains(p, "/linuxbrew/"):
+	case strings.Contains(p, "/cellar/") || strings.Contains(p, "/caskroom/") ||
+		strings.Contains(p, "/homebrew/") || strings.Contains(p, "/linuxbrew/"):
 		return "brew upgrade hookline"
 	case strings.Contains(p, "/scoop/"):
 		return "scoop update hookline"

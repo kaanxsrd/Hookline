@@ -9,13 +9,22 @@ The `hookline` CLI forwards what your endpoints capture to a server on your mach
 
 ## Install
 
-Homebrew, Scoop and npm packages arrive with the first release. Until then, build the CLI from the repository with Go 1.27 or later:
+```sh
+brew install --cask kaanxsrd/tap/hookline      # macOS
+scoop bucket add hookline https://github.com/kaanxsrd/scoop-bucket
+scoop install hookline                          # Windows
+npm install -g @hookline/cli                    # any platform with Node 18+
+```
+
+Archives for macOS, Linux and Windows (x64 and arm64) are also on the [releases page](https://github.com/kaanxsrd/hookline/releases), with checksums. To build from source, use Go 1.27 or later:
 
 ```sh
 git clone https://github.com/kaanxsrd/hookline
 cd hookline/cli
 go build -o hookline .
 ```
+
+Release builds use the hosted instance by default; set `HOOKLINE_URL` or pass `--url` to use your own.
 
 Check for a newer release at any time with `hookline update`. It prints the right upgrade command for how you installed it.
 

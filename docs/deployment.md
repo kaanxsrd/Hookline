@@ -1,6 +1,157 @@
 # Deployment
 
-Configuration is entirely through environment variables; `.env.example` lists every one with development values. This document covers the optional integrations; production images, Caddy, `docker-compose.prod.yml`, Fly.io and backups are documented with the release tooling.
+Configuration is entirely through environment variables. `.env.example` lists every one with development values, and `deploy/production.env.example` lists the production ones.
+
+- [Production on one host](#production-on-one-host) with Docker Compose and Caddy
+- [Backups and restores](#backups-and-restores)
+- [Upgrades](#upgrades)
+- [Fly.io](#flyio)
+- [Vercel and Railway](#vercel-and-railway)
+- [Releases](#releases)
+- [Load testing](#load-testing)
+- [Email](#email), [billing with Stripe](#billing-with-stripe) and [plan limits](#plan-limits)
+
+## Production on one host
+
+`docker-compose.prod.yml` runs a complete instance: Caddy (TLS from Let's Encrypt), the web app, the edge, the worker, PostgreSQL 17, Redis 7, MinIO and a daily backup job. You need a host with Docker, ports 80 and 443 open, and a DNS record for your domain pointing at it.
+
+```sh
+git clone https://github.com/kaanxsrd/hookline && cd hookline
+cp deploy/production.env.example .env.production
+# Fill in the domain, secrets (openssl rand -base64 48) and SMTP settings.
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+```
+
+Every `up` first runs the `migrate` container, which applies pending migrations; the web app, edge and worker start only after it succeeds. Images come from `ghcr.io/kaanxsrd/hookline-{web,edge,worker,migrate}` at `HOOKLINE_VERSION`. To build them from the checkout instead, run `docker compose -f docker-compose.prod.yml --env-file .env.production build` first.
+
+| Image     | Built from (`Dockerfile` target)          | Runs as                        |
+| --------- | ----------------------------------------- | ------------------------------ |
+| `web`     | Next.js standalone output on Node 24      | `node`, port 3000              |
+| `edge`    | Static Go binary on distroless            | `nonroot`, ports 8080 and 9090 |
+| `worker`  | Static Go binary on distroless            | `nonroot`, port 8081 (health)  |
+| `migrate` | `packages/db` and its dependencies on Bun | `bun`, exits when done         |
+
+**Routing.** `deploy/Caddyfile` sends `/h/*` and `/v1/*` to the edge, with flushing on and compression off so live streams and sync responses are not held back, and everything else to the web app. It adds HSTS and strips `Server`. Caddy replaces `X-Forwarded-For` with the client address it sees, which is what the web app and the edge rely on: never publish the web app or the edge ports directly.
+
+**First administrator.** Sign up in the browser, then:
+
+```sh
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  run --rm migrate bun packages/db/scripts/admin-grant.ts you@example.com
+```
+
+**Private instances** usually set `PLAN_OVERRIDE=unlimited`. **Redis** runs without persistence: it only holds caches, rate-limit buckets and pub/sub, and the monthly quota counters are seeded again from PostgreSQL.
+
+**Health.** `GET /api/healthz` (web, liveness), `GET /api/readyz` (web, database), `/readyz` on the edge (`ready`, `degraded` without Redis or object storage, `unavailable` without PostgreSQL) and on the worker's port 8081. `/status` shows the same in the browser. Prometheus metrics are on the edge's port 9090, inside the Docker network only.
+
+## Backups and restores
+
+The `backup` service writes `pg_dump --format=custom` dumps to the `backups` volume once a day and deletes those older than `BACKUP_KEEP_DAYS` (14 by default). Copy them off the host, for example with a nightly `rsync` or `restic` of the volume:
+
+```sh
+docker run --rm -v hookline-production_backups:/backups -v "$PWD":/out alpine \
+  sh -c 'cp /backups/$(ls /backups | tail -1) /out/'
+```
+
+To restore, stop the services that write, restore into the empty database, then start everything again:
+
+```sh
+P="docker compose -f docker-compose.prod.yml --env-file .env.production"
+$P stop web edge worker
+$P exec -T postgres dropdb -U hookline hookline
+$P exec -T postgres createdb -U hookline hookline
+$P exec -T postgres pg_restore -U hookline -d hookline --no-owner < hookline-20261029T030000Z.dump
+$P up -d
+```
+
+Request bodies over 64 KiB live in MinIO (`minio-data` volume), not in the dump. Back them up with `mc mirror` or by copying the volume. Without them, the requests they belong to are still listed but their large bodies cannot be shown, downloaded or forwarded. Keep `DATA_ENCRYPTION_KEY` with the backups: without it, signing secrets in the dump cannot be decrypted.
+
+## Upgrades
+
+Read the release notes, then set `HOOKLINE_VERSION` to the new version and run:
+
+```sh
+docker compose -f docker-compose.prod.yml --env-file .env.production pull
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+```
+
+Migrations run before the new web app, edge and worker start, while the previous version is still serving, so migrations must stay compatible with the version before them (add columns before using them, drop them a release later). The edge and worker get 30 seconds to finish in-flight work; open streams and tunnels reconnect on their own.
+
+## Fly.io
+
+`deploy/fly/` has configurations for three Fly apps. The edge gets its own hostname (for example `hooks.example.com`), because Fly routes by host, not path. Use managed services for the stores: Fly Postgres or any PostgreSQL 17, Upstash Redis, and Tigris or any S3-compatible bucket.
+
+```sh
+fly apps create hookline-web && fly apps create hookline-edge && fly apps create hookline-worker
+# Set the same secrets on all three apps:
+fly secrets set --app hookline-web DATABASE_URL=... REDIS_URL=... BETTER_AUTH_SECRET=... \
+  STREAM_TOKEN_SECRET=... DATA_ENCRYPTION_KEY=... S3_ENDPOINT=... S3_BUCKET=... \
+  S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=... SMTP_URL=... MAIL_FROM=... \
+  APP_URL=https://hookline.example.com EDGE_PUBLIC_URL=https://hooks.example.com \
+  EDGE_INTERNAL_URL=http://hookline-edge.internal:8080
+# Apply migrations with a one-off machine, then deploy:
+fly machine run ghcr.io/kaanxsrd/hookline-migrate:latest --app hookline-web --rm \
+  --env DATABASE_URL=...
+fly deploy --config deploy/fly/edge.toml
+fly deploy --config deploy/fly/worker.toml
+fly deploy --config deploy/fly/web.toml
+fly certs add hookline.example.com --app hookline-web
+fly certs add hooks.example.com --app hookline-edge
+```
+
+The web app sends HSTS itself when `APP_URL` is `https://`. The browser's live stream connects to the edge origin, which the Content Security Policy allows through `EDGE_PUBLIC_URL`.
+
+## Vercel and Railway
+
+The web app runs on Vercel; the edge, the worker, PostgreSQL and Redis run on Railway, where they talk over Railway's free private network. As with Fly.io, the edge gets its own hostname (for example `hooks.example.com`).
+
+**Railway** (one project, one region, ideally the one closest to your Vercel region):
+
+1. Add **PostgreSQL** and **Redis** from Railway's templates. Enable public networking (TCP proxy) on both: Vercel reaches them over the internet.
+2. Give Redis a small memory cap and no persistence; it only holds caches, rate-limit buckets and pub/sub. Set its start command to `redis-server --save "" --appendonly no --maxmemory 64mb --maxmemory-policy volatile-lru --requirepass $REDIS_PASSWORD`.
+3. Add three services from the GitHub repository, all building the root `Dockerfile`. Set each one's config file (Settings → Config-as-code) and its `HOOKLINE_TARGET` variable, which Railway passes to the build:
+
+   | Service   | Config file                   | `HOOKLINE_TARGET` | Networking                        |
+   | --------- | ----------------------------- | ----------------- | --------------------------------- |
+   | `edge`    | `deploy/railway/edge.json`    | `edge`            | Public domain → port 8080         |
+   | `worker`  | `deploy/railway/worker.json`  | `worker`          | None                              |
+   | `migrate` | `deploy/railway/migrate.json` | `migrate`         | None; runs migrations, then exits |
+
+4. Put the common settings (`APP_URL`, `EDGE_PUBLIC_URL`, `DATA_ENCRYPTION_KEY`, `STREAM_TOKEN_SECRET`, SMTP, S3, `LOG_FORMAT=json`) in shared variables, and per service `DATABASE_URL=${{Postgres.DATABASE_URL}}` and `REDIS_URL=${{Redis.REDIS_URL}}` (private URLs). The edge also needs `EDGE_ADDR=:8080` and `PORT=8080`.
+5. Add the edge's custom domain and point a CNAME at it. After the first webhook, check that the inbox shows the sender's address. If it shows a `100.64.x.x` address, Railway's proxy is not trusted yet: set `TRUSTED_PROXIES` to the default ranges plus `100.64.0.0/10`.
+
+**Vercel:** import the repository with **Root Directory** `apps/web` (Vercel detects Next.js and Bun). `apps/web/vercel.json` pins the functions to `fra1` and skips builds when only Go code changed. Set the web app's variables, with `DATABASE_URL` and `REDIS_URL` from the Postgres and Redis **public** URLs (add `?sslmode=require` to the database URL), `DATABASE_POOL_MAX=3`, and `EDGE_INTERNAL_URL` set to the edge's public URL. Then add the app's domain. Background emails use `after()`, so Vercel keeps a function alive until they are sent.
+
+**Order:** Postgres and Redis, then `migrate` (check its logs say "Migrations applied."), then the edge and worker, then Vercel. On later pushes Railway redeploys only the services whose watch paths changed; `migrate` reruns when `packages/db` changes.
+
+**Keeping Railway cheap.** Railway bills for the CPU and memory a service actually uses, for volume storage and for egress; builds and private networking are free.
+
+- The Go services idle at a few tens of MB. `GOMEMLIMIT=96MiB` keeps them from growing, and `EDGE_DB_MAX_CONNS=8` and `WORKER_DELIVERY_CONCURRENCY=10` fit a small instance (raise them under real load).
+- Never put the edge to sleep: webhook senders do not retry forever. The `migrate` service costs nothing between deploys because it exits.
+- Keep everything in one region and use the private URLs between Railway services. Only the dashboard's queries from Vercel cross the internet.
+- Retention keeps the database small: the worker deletes requests past each endpoint's retention, and the Free plan keeps 24 hours.
+- Put bodies over 64 KiB in Cloudflare R2 (no egress fees, free tier) instead of a bucket on Railway, or leave `S3_BUCKET` empty to reject them.
+
+**Things to know.** Vercel's Hobby plan is for non-commercial use only, so a service that charges needs Vercel Pro. Railway's TCP proxy does not encrypt Redis traffic: the password and cache keys cross the internet between Vercel and Railway. Running the web app on Railway too (target `web`, port 3000) avoids both, keeps all traffic private and usually costs less than Vercel Pro.
+
+**Email** works with any SMTP provider. Microsoft 365 (`smtp.office365.com:587`) needs SMTP AUTH turned on for the mailbox; the URL is `smtp://user%40domain:password@smtp.office365.com:587` (the `@` in the user name becomes `%40`), and `MAIL_FROM` must be that mailbox or one it may send as. Both the web app and the worker support the `LOGIN` mechanism Microsoft 365 requires.
+
+## Releases
+
+One version covers the whole product. Pushing a tag such as `v0.1.0` runs `.github/workflows/release.yml`:
+
+- **CLI:** goreleaser (`.goreleaser.yaml`) builds macOS, Linux and Windows binaries for x64 and arm64, publishes archives and checksums on the GitHub release, and updates the Homebrew cask in `kaanxsrd/homebrew-tap` and the Scoop manifest in `kaanxsrd/scoop-bucket`. `scripts/release/npm.ts` turns the binaries into `@hookline/cli`, a small launcher, plus one optional package per platform (no install script). Release builds talk to `vars.HOOKLINE_DEFAULT_URL` by default.
+- **Images:** `web`, `edge`, `worker` and `migrate` for `linux/amd64` and `linux/arm64` go to GHCR, tagged with the version, `major.minor` and `latest` (not for pre-releases such as `v0.2.0-rc.1`), with provenance and an SBOM.
+
+The tap, bucket and npm steps are skipped when their secrets (`HOMEBREW_TAP_TOKEN`, `SCOOP_BUCKET_TOKEN`, `NPM_TOKEN`) are not set. CI builds every image and a goreleaser snapshot on each push, so a release cannot break on packaging alone. Try it locally with `goreleaser release --snapshot --clean`.
+
+## Load testing
+
+```sh
+bun run loadtest -- --url http://localhost:8080/h/<slug> --duration 30s --concurrency 64
+```
+
+The script reports throughput, latency percentiles and status counts, and exits 1 when more than `--max-failure-rate` (1 % by default) of requests fail. Plan limits apply as for any sender, so use an endpoint on an unlimited plan (`PLAN_OVERRIDE=unlimited` in development). The instance-wide per-IP limit (`config/plans.json`, 50 per second with bursts of 200) caps a single machine. When you call the edge directly from a loopback or private address, `--spread-ips` gives each request its own `X-Forwarded-For` so the test measures the edge rather than that limit. Through Caddy this has no effect, which is the point of the limit.
 
 ## Email
 

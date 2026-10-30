@@ -1,0 +1,95 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+#
+# Releases the hookline CLI when a v* tag is pushed (.github/workflows/release.yml):
+# archives and checksums on the GitHub release, a Homebrew cask, a Scoop
+# manifest, and the binaries the npm packages wrap (scripts/release/npm.ts).
+#
+# Try it locally without publishing:
+#   goreleaser release --snapshot --clean
+version: 2
+project_name: hookline
+
+builds:
+  - id: hookline
+    dir: cli
+    main: .
+    binary: hookline
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/kaanxsrd/hookline/cli/internal/buildinfo.version={{ .Version }}
+      - -X github.com/kaanxsrd/hookline/cli/internal/buildinfo.commit={{ .FullCommit }}
+      - -X github.com/kaanxsrd/hookline/cli/internal/buildinfo.date={{ .Date }}
+      # The instance the CLI uses by default (the hosted service). Set the
+      # HOOKLINE_DEFAULT_URL repository variable; builds without it keep localhost.
+      - -X github.com/kaanxsrd/hookline/cli/internal/buildinfo.defaultURL={{ envOrDefault "HOOKLINE_DEFAULT_URL" "http://localhost:3000" }}
+      - -X github.com/kaanxsrd/hookline/cli/internal/buildinfo.repository={{ envOrDefault "GITHUB_REPOSITORY" "kaanxsrd/hookline" }}
+
+archives:
+  - id: hookline
+    ids: [hookline]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "hookline_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^chore"
+      - "^docs"
+      - "^test"
+
+homebrew_casks:
+  - name: hookline
+    repository:
+      owner: kaanxsrd
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/kaanxsrd/hookline
+    description: Catch every webhook. Replay anything. Pipe it to localhost.
+    license: MIT
+    # Without a tap token (forks, snapshots) the cask is skipped.
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
+    hooks:
+      post:
+        # The binary is not notarized: clear the quarantine flag Gatekeeper checks.
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/hookline"]
+          end
+
+scoops:
+  - name: hookline
+    repository:
+      owner: kaanxsrd
+      name: scoop-bucket
+      token: "{{ .Env.SCOOP_BUCKET_TOKEN }}"
+    homepage: https://github.com/kaanxsrd/hookline
+    description: Catch every webhook. Replay anything. Pipe it to localhost.
+    license: MIT
+    skip_upload: '{{ if index .Env "SCOOP_BUCKET_TOKEN" }}false{{ else }}true{{ end }}'
+
+release:
+  github:
+    owner: kaanxsrd
+    name: hookline
+  name_template: "Hookline {{ .Version }}"
+  prerelease: auto
+  footer: |
+    **Server images:** `ghcr.io/kaanxsrd/hookline-{web,edge,worker,migrate}:{{ .Version }}`
+
+    **CLI:** `brew install --cask kaanxsrd/tap/hookline` · `scoop bucket add hookline https://github.com/kaanxsrd/scoop-bucket && scoop install hookline` · `npm install -g @hookline/cli`

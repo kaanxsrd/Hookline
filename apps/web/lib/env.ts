@@ -9,6 +9,8 @@ const schema = z.object({
   /** Where the web app reaches the edge directly (its /readyz feeds the status page). */
   EDGE_INTERNAL_URL: z.url().optional(),
   DATABASE_URL: z.string().min(1),
+  /** Connections per server process. Keep it small on serverless hosts (Vercel), where many instances run. */
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   REDIS_URL: z.string().min(1).default("redis://localhost:6380/0"),
   /** Signs Better Auth sessions and tokens. */
   BETTER_AUTH_SECRET: z.string().min(32),

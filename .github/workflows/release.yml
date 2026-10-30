@@ -1,0 +1,143 @@
+name: Release
+
+# One version for the whole product: pushing a tag such as v0.1.0 publishes
+# the CLI (GitHub release, Homebrew cask, Scoop manifest, npm packages) and
+# the server images on GHCR.
+#
+# Repository settings used here:
+#   secrets.HOMEBREW_TAP_TOKEN  push access to kaanxsrd/homebrew-tap (optional)
+#   secrets.SCOOP_BUCKET_TOKEN  push access to kaanxsrd/scoop-bucket (optional)
+#   secrets.NPM_TOKEN           publish rights for the @hookline npm scope (optional)
+#   vars.HOOKLINE_DEFAULT_URL   the instance release CLIs talk to by default
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cli:
+    name: CLI (goreleaser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+          HOOKLINE_DEFAULT_URL: ${{ vars.HOOKLINE_DEFAULT_URL }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: |
+            dist/metadata.json
+            dist/artifacts.json
+            dist/hookline_*/
+          retention-days: 7
+
+  npm:
+    name: npm packages
+    needs: cli
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - run: bun scripts/release/npm.ts dist
+
+      - name: Publish (platform packages first, then the launcher)
+        if: env.NODE_AUTH_TOKEN != ''
+        run: |
+          tag=latest
+          case "$GITHUB_REF_NAME" in *-*) tag=next ;; esac
+          for dir in dist/npm/cli-*/ dist/npm/cli/; do
+            (cd "$dir" && npm publish --access public --provenance --tag "$tag")
+          done
+
+  images:
+    name: Image (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [web, edge, worker, migrate]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/hookline-${{ matrix.target }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}

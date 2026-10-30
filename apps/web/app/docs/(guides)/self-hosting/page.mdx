@@ -17,7 +17,19 @@ Hookline is open source under the MIT license, and the hosted service runs the s
 
 They need PostgreSQL 17, Redis 7 and S3-compatible object storage for bodies over 64 KiB, plus an SMTP server for email. A reverse proxy such as Caddy sends `/h/*` and `/v1/*` to the edge and everything else to the web app, all on one domain.
 
-Everything is configured with environment variables. `.env.example` in the repository lists them with development values. Production images and deployment guides ship with the first release. Until then, the [repository](https://github.com/kaanxsrd/hookline) explains how to run everything locally.
+## Run it with Docker Compose
+
+On a host with Docker, ports 80 and 443 open and a DNS record pointing at it:
+
+```sh
+git clone https://github.com/kaanxsrd/hookline && cd hookline
+cp deploy/production.env.example .env.production   # domain, secrets, SMTP
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+```
+
+This starts Caddy (with a Let's Encrypt certificate), the web app, the edge, the worker, PostgreSQL, Redis, MinIO and a daily database backup. Migrations run on every start. Images are published to GitHub's container registry for each release (`ghcr.io/kaanxsrd/hookline-web`, `-edge`, `-worker` and `-migrate`).
+
+The [deployment guide](https://github.com/kaanxsrd/hookline/blob/main/docs/deployment.md) covers backups and restores, upgrades, Fly.io, email, Stripe billing and load testing.
 
 ## Lifting plan limits
 
@@ -34,8 +46,11 @@ Billing stays off unless `STRIPE_SECRET_KEY` is set. Without billing, administra
 Instance administrators can open **/admin**, which is hidden from everyone else. Make someone an administrator once they have an account:
 
 ```sh
-bun run admin:grant you@example.com
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  run --rm migrate bun packages/db/scripts/admin-grant.ts you@example.com
 ```
+
+In a development checkout, `bun run admin:grant you@example.com` does the same.
 
 Administrators can then promote others from the admin area. The admin area provides:
 

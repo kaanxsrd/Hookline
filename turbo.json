@@ -21,6 +21,9 @@
         "$TURBO_ROOT$/cli/**"
       ]
     },
+    "vulncheck": {
+      "cache": false
+    },
     "typecheck": {
       "dependsOn": ["^typecheck"]
     },

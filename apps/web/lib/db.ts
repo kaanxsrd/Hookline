@@ -7,6 +7,6 @@ import { env } from "./env";
 const globalForDb = globalThis as typeof globalThis & { __hooklineDb?: Database };
 
 export function getDb(): Database["db"] {
-  globalForDb.__hooklineDb ??= createDatabase(env().DATABASE_URL, { max: 10 });
+  globalForDb.__hooklineDb ??= createDatabase(env().DATABASE_URL, { max: env().DATABASE_POOL_MAX });
   return globalForDb.__hooklineDb.db;
 }

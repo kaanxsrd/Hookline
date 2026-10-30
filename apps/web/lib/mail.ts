@@ -1,5 +1,6 @@
 import "server-only";
 import { render } from "@react-email/render";
+import { after } from "next/server";
 import nodemailer, { type Transporter } from "nodemailer";
 import type { ReactElement } from "react";
 import { env } from "./env";
@@ -25,7 +26,16 @@ export async function sendEmail({ to, subject, body }: Message): Promise<void> {
  * notifications that must never fail the request that triggered them.
  */
 export function sendEmailInBackground(message: Message): void {
-  sendEmail(message).catch((error: unknown) => {
-    console.error("email delivery failed", { subject: message.subject, error });
-  });
+  const send = () =>
+    sendEmail(message).catch((error: unknown) => {
+      console.error("email delivery failed", { subject: message.subject, error });
+    });
+  try {
+    // Runs once the response is sent, and keeps serverless functions (Vercel)
+    // alive until it finishes instead of freezing them mid-send.
+    after(send);
+  } catch {
+    // Outside a request (scripts, tests): nothing to wait for.
+    void send();
+  }
 }

@@ -63,6 +63,9 @@ test("robots.txt, the sitemap and the social image are served", async ({ request
   expect(sitemap).toContain("/pricing");
   expect(sitemap).not.toContain("/admin");
 
+  const ready = await request.get("/api/readyz");
+  expect(await ready.json()).toEqual({ status: "ready" });
+
   const image = await request.get("/opengraph-image");
   expect(image.status()).toBe(200);
   expect(image.headers()["content-type"]).toContain("image/png");

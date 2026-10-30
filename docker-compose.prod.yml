@@ -1,0 +1,171 @@
+# A complete Hookline instance on one host: Caddy (TLS), web, edge, worker,
+# PostgreSQL, Redis, MinIO and daily database backups.
+#
+#   cp deploy/production.env.example .env.production   # then fill it in
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+#
+# Images come from GHCR; `... build` builds them from this checkout instead.
+# See docs/deployment.md for upgrades, backups and restores.
+name: hookline-production
+
+x-app: &app
+  restart: unless-stopped
+  env_file: [.env.production]
+  environment: &app-env
+    APP_URL: https://${HOOKLINE_DOMAIN:?set HOOKLINE_DOMAIN}
+    EDGE_PUBLIC_URL: https://${HOOKLINE_DOMAIN}
+    EDGE_INTERNAL_URL: http://edge:8080
+    DATABASE_URL: postgres://hookline:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/hookline?sslmode=disable
+    REDIS_URL: redis://redis:6379/0
+    S3_ENDPOINT: http://minio:9000
+    S3_REGION: us-east-1
+    S3_FORCE_PATH_STYLE: "true"
+    LOG_FORMAT: json
+  depends_on: &app-deps
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+    minio-init:
+      condition: service_completed_successfully
+
+services:
+  caddy:
+    image: caddy:2.11.7-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      HOOKLINE_DOMAIN: ${HOOKLINE_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [web, edge]
+
+  web:
+    <<: *app
+    image: ghcr.io/kaanxsrd/hookline-web:${HOOKLINE_VERSION:-latest}
+    build: { context: ., target: web }
+
+  edge:
+    <<: *app
+    image: ghcr.io/kaanxsrd/hookline-edge:${HOOKLINE_VERSION:-latest}
+    build: { context: ., target: edge }
+    # Lets in-flight requests finish and tells live viewers to reconnect.
+    stop_grace_period: 30s
+
+  worker:
+    <<: *app
+    image: ghcr.io/kaanxsrd/hookline-worker:${HOOKLINE_VERSION:-latest}
+    build: { context: ., target: worker }
+    stop_grace_period: 30s
+
+  # Applies pending migrations on every `up`, then exits.
+  migrate:
+    image: ghcr.io/kaanxsrd/hookline-migrate:${HOOKLINE_VERSION:-latest}
+    build: { context: ., target: migrate }
+    environment:
+      DATABASE_URL: postgres://hookline:${POSTGRES_PASSWORD}@postgres:5432/hookline?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  postgres:
+    image: postgres:17.11-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hookline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: hookline
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hookline -d hookline"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.4.12-alpine
+    restart: unless-stopped
+    # A cache and pub/sub bus: never the system of record, so no persistence.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: cgr.dev/chainguard/minio@sha256:0dab2f9fee1c1139ae8753b5e35bb4461af2a276cfe0923a2504c75a6170bc64
+    restart: unless-stopped
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /minio/health/live HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          read -r status <&3 && [[ $$status == *" 200 "* ]]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  minio-init:
+    image: cgr.dev/chainguard/minio-client@sha256:4c288033f700b35846037c53ce39ba287f4bed0a571518c1f4d8d2788beb5cb5
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MC_HOST_local: http://${S3_ACCESS_KEY_ID}:${S3_SECRET_ACCESS_KEY}@minio:9000
+    command: ["mb", "--ignore-existing", "local/${S3_BUCKET:-hookline-payloads}"]
+    restart: on-failure:5
+
+  # Dumps the database once a day into the backups volume and prunes old dumps.
+  backup:
+    image: postgres:17.11-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: hookline
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: hookline
+      KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          file="/backups/hookline-$$(date -u +%Y%m%dT%H%M%SZ).dump"
+          if pg_dump --format=custom --file="$$file.partial"; then
+            mv "$$file.partial" "$$file" && echo "backup written: $$file"
+          else
+            rm -f "$$file.partial"; echo "backup failed" >&2
+          fi
+          find /backups -name 'hookline-*.dump' -mtime +"$$KEEP_DAYS" -delete
+          sleep 86400
+        done
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
+  minio-data:
+  backups:

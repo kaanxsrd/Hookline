@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "bun ../../scripts/go.ts dev",
     "lint": "bun ../../scripts/go.ts lint",
-    "test": "bun ../../scripts/go.ts test"
+    "test": "bun ../../scripts/go.ts test",
+    "vulncheck": "bun ../../scripts/go.ts tool govulncheck ./..."
   },
   "dependencies": {
     "@hookline/gocommon": "workspace:*"

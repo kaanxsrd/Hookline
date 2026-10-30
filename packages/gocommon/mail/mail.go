@@ -22,6 +22,7 @@ import (
 	"net/smtp"
 	"net/textproto"
 	"net/url"
+	"slices"
 	"strings"
 	texttemplate "text/template"
 	"time"
@@ -174,7 +175,7 @@ func (s *SMTP) Send(ctx context.Context, m Message) error {
 	}
 	if s.url.User != nil {
 		pass, _ := s.url.User.Password()
-		if err := c.Auth(smtp.PlainAuth("", s.url.User.Username(), pass, host)); err != nil {
+		if err := c.Auth(chooseAuth(c, s.url.User.Username(), pass, host)); err != nil {
 			return fmt.Errorf("mail: auth: %w", err)
 		}
 	}
@@ -204,3 +205,47 @@ type Discard struct{}
 
 // Send implements Sender.
 func (Discard) Send(context.Context, Message) error { return nil }
+
+// chooseAuth picks PLAIN when the server offers it and LOGIN otherwise:
+// Microsoft 365 (smtp.office365.com) advertises only LOGIN and XOAUTH2.
+func chooseAuth(c *smtp.Client, username, password, host string) smtp.Auth {
+	if ok, mechs := c.Extension("AUTH"); ok {
+		offered := strings.Fields(strings.ToUpper(mechs))
+		if !slices.Contains(offered, "PLAIN") && slices.Contains(offered, "LOGIN") {
+			return loginAuth{username: username, password: password, host: host}
+		}
+	}
+	return smtp.PlainAuth("", username, password, host)
+}
+
+// loginAuth implements the AUTH LOGIN mechanism. Like smtp.PlainAuth, it
+// refuses to send credentials over an unencrypted connection except to
+// localhost.
+type loginAuth struct{ username, password, host string }
+
+func (a loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
+	if !server.TLS && !isLocalhost(server.Name) {
+		return "", nil, errors.New("mail: refusing AUTH LOGIN over an unencrypted connection")
+	}
+	if server.Name != a.host {
+		return "", nil, errors.New("mail: wrong host name")
+	}
+	return "LOGIN", nil, nil
+}
+
+func (a loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
+	if !more {
+		return nil, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(string(fromServer))) {
+	case "username:":
+		return []byte(a.username), nil
+	case "password:":
+		return []byte(a.password), nil
+	}
+	return nil, fmt.Errorf("mail: unexpected AUTH LOGIN challenge %q", fromServer)
+}
+
+func isLocalhost(name string) bool {
+	return name == "localhost" || name == "127.0.0.1" || name == "::1"
+}

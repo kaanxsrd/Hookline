@@ -21,7 +21,7 @@ var (
 	repository = "kaanxsrd/hookline"
 )
 
-// Repository is the GitHub repository whose cli-v* releases ship the CLI.
+// Repository is the GitHub repository whose releases ship the CLI.
 func Repository() string { return repository }
 
 // DefaultURL is the instance the CLI talks to unless configured otherwise.

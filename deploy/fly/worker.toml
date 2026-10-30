@@ -1,0 +1,24 @@
+# Hookline worker (forwarding, retries, retention, rollups) on Fly.io.
+# No public service; any number of machines can run (River elects a leader).
+#   fly deploy --config deploy/fly/worker.toml --app <your worker app>
+app = "hookline-worker"
+primary_region = "fra"
+
+[build]
+  image = "ghcr.io/kaanxsrd/hookline-worker:latest"
+
+[env]
+  LOG_FORMAT = "json"
+  WORKER_HEALTH_ADDR = ":8081"
+
+[checks.ready]
+  type = "http"
+  port = 8081
+  path = "/readyz"
+  interval = "15s"
+  timeout = "3s"
+  grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

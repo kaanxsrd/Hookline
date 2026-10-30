@@ -23,6 +23,9 @@ func TestVersions(t *testing.T) {
 
 func TestUpgradeHint(t *testing.T) {
 	assert.Equal(t, "brew upgrade hookline", upgradeHint("/opt/homebrew/Cellar/hookline/1.0.0/bin/hookline"))
+	assert.Equal(t, "brew upgrade hookline", upgradeHint("/usr/local/Caskroom/hookline/1.0.0/hookline"))
+	assert.Equal(t, "npm install -g @hookline/cli@latest",
+		upgradeHint("/usr/lib/node_modules/@hookline/cli-linux-x64/bin/hookline"))
 	assert.Equal(t, "scoop update hookline", upgradeHint(`C:\Users\me\scoop\apps\hookline\current\hookline.exe`))
 	assert.Equal(t, "npm install -g @hookline/cli@latest", upgradeHint("/usr/lib/node_modules/@hookline/cli/bin/hookline"))
 	assert.Empty(t, upgradeHint("/usr/local/bin/hookline"))

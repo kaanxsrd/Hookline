@@ -1,0 +1,41 @@
+# One domain for everything: intake, streams and tunnels go to the edge,
+# the rest to the web app. Caddy obtains and renews the TLS certificate.
+#
+# Caddy replaces X-Forwarded-For with the address it received the connection
+# from (it trusts no upstream proxy here), which is what the web app and the
+# edge expect. Do not expose the web app or the edge without it.
+{
+	email {$ACME_EMAIL}
+	servers {
+		timeouts {
+			read_header 10s
+			idle 2m
+		}
+	}
+}
+
+{$HOOKLINE_DOMAIN} {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# Intake (/h/...), live streams and CLI tunnels (/v1/...). No compression and
+	# immediate flushing, so Server-Sent Events and sync responses are not held back.
+	@edge path /h /h/* /v1/*
+	handle @edge {
+		reverse_proxy edge:8080 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		encode zstd gzip
+		reverse_proxy web:3000
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

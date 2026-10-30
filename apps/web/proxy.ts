@@ -66,6 +66,10 @@ export function proxy(request: NextRequest) {
   requestHeaders.set("Content-Security-Policy", csp);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
+  // Caddy adds HSTS too; this covers deployments without it (e.g. Fly.io).
+  if (process.env.APP_URL?.startsWith("https://")) {
+    response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
   return response;
 }
 

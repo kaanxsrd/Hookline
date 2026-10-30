@@ -2,6 +2,7 @@ package mail_test
 
 import (
 	"bufio"
+	"encoding/base64"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -66,8 +67,10 @@ func TestBuildIsMultipart(t *testing.T) {
 	assert.Equal(t, []string{"text/plain; charset=utf-8", "text/html; charset=utf-8"}, types)
 }
 
-// fakeSMTP accepts one message and records the conversation.
-func fakeSMTP(t *testing.T) (string, <-chan string) {
+// fakeSMTP accepts one message and records the conversation. With auth set
+// (e.g. "LOGIN"), it advertises those mechanisms, runs AUTH LOGIN and records
+// the credentials as an "auth user/pass" first line.
+func fakeSMTP(t *testing.T, auth string) (string, <-chan string) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ln.Close() })
@@ -100,7 +103,24 @@ func fakeSMTP(t *testing.T) (string, <-chan string) {
 			cmd := strings.ToUpper(strings.TrimSpace(line))
 			switch {
 			case strings.HasPrefix(cmd, "EHLO"), strings.HasPrefix(cmd, "HELO"):
-				say("250 fake")
+				if auth == "" {
+					say("250 fake")
+				} else {
+					say("250-fake")
+					say("250 AUTH " + auth)
+				}
+			case cmd == "AUTH LOGIN":
+				read := func(prompt string) string {
+					say("334 " + base64.StdEncoding.EncodeToString([]byte(prompt)))
+					l, _ := r.ReadString('\n')
+					b, _ := base64.StdEncoding.DecodeString(strings.TrimSpace(l))
+					return string(b)
+				}
+				user, pass := read("Username:"), read("Password:")
+				data.WriteString("auth " + user + "/" + pass + "\n")
+				say("235 authenticated")
+			case strings.HasPrefix(cmd, "AUTH"):
+				say("504 unrecognized authentication type")
 			case strings.HasPrefix(cmd, "MAIL"), strings.HasPrefix(cmd, "RCPT"):
 				say("250 ok")
 			case cmd == "DATA":
@@ -118,8 +138,28 @@ func fakeSMTP(t *testing.T) (string, <-chan string) {
 	return ln.Addr().String(), got
 }
 
+func TestSMTPAuthLogin(t *testing.T) {
+	// Like Microsoft 365: LOGIN offered, PLAIN not. 127.0.0.1 counts as localhost,
+	// so credentials may travel without TLS in this test only.
+	addr, got := fakeSMTP(t, "LOGIN XOAUTH2")
+	port := strings.TrimPrefix(addr, "127.0.0.1:")
+	s, err := mail.NewSMTP("smtp://contact%40example.com:s3cret@127.0.0.1:"+port, "Hookline <contact@example.com>")
+	require.NoError(t, err)
+	err = s.Send(t.Context(), mail.Message{
+		To: []string{"owner@example.com"}, Subject: "Deliveries are failing", Template: "delivery_failing",
+		Data: failing{OrgName: "Acme", DestinationName: "API", DestinationURL: "https://api.example.com", EndpointName: "Stripe", LastResult: "timeout", URL: "https://hookline.test/acme/deliveries"},
+	})
+	require.NoError(t, err)
+	select {
+	case body := <-got:
+		assert.True(t, strings.HasPrefix(body, "auth contact@example.com/s3cret\n"), body[:min(len(body), 80)])
+	case <-time.After(5 * time.Second):
+		t.Fatal("no message")
+	}
+}
+
 func TestSMTPSend(t *testing.T) {
-	addr, got := fakeSMTP(t)
+	addr, got := fakeSMTP(t, "")
 	s, err := mail.NewSMTP("smtp://"+addr, "Hookline <no-reply@hookline.test>")
 	require.NoError(t, err)
 	err = s.Send(t.Context(), mail.Message{

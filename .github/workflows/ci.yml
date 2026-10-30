@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -121,3 +122,74 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report
           retention-days: 7
+
+  security:
+    name: Vulnerability scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: Cache pinned Go tools
+        uses: actions/cache@v6
+        with:
+          path: .tools
+          key: go-tools-${{ runner.os }}-${{ hashFiles('tools/go.sum') }}
+
+      - run: bun install --frozen-lockfile
+
+      # govulncheck on every Go module (reachable code only), then bun audit (high and critical).
+      - run: bun run vulncheck
+
+  # The slowest job (four images and six binaries): pull requests and manual
+  # runs only, so pushes to main do not spend Actions minutes on it.
+  release-dry-run:
+    name: Release artifacts build
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: CLI snapshot (goreleaser) and npm packages
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean --skip=publish
+
+      - run: bun scripts/release/npm.ts dist
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build every image target
+        run: |
+          for target in web edge worker migrate; do
+            docker buildx build --target "$target" -t "hookline-$target:ci" --load .
+          done
+
+      - name: Production compose file is valid
+        run: |
+          sed 's/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci/; s/^S3_SECRET_ACCESS_KEY=$/S3_SECRET_ACCESS_KEY=ci/' \
+            deploy/production.env.example > .env.production
+          docker compose -f docker-compose.prod.yml --env-file .env.production config --quiet
