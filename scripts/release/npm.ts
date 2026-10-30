@@ -2,8 +2,8 @@
  * bun scripts/release/npm.ts [dist] — builds the npm packages of the CLI from
  * a goreleaser dist directory (after `goreleaser release`):
  *
- *   dist/npm/cli-<os>-<cpu>/   @hookline/cli-<os>-<cpu>, one native binary each
- *   dist/npm/cli/              @hookline/cli, the launcher (cli/npm/hookline.js)
+ *   dist/npm/cli-<os>-<cpu>/   hookline-cli-<os>-<cpu>, one native binary each
+ *   dist/npm/cli/              hookline-cli, the launcher (cli/npm/hookline.js)
  *                              with the platform packages as optional dependencies
  *
  * Publish the platform packages first, then the launcher (release.yml does).
@@ -28,7 +28,7 @@ const CPU: Record<string, string> = { amd64: "x64", arm64: "arm64" };
 const common = {
   version,
   license: "GPL-3.0-only",
-  homepage: "https://github.com/kaanxsrd/hookline",
+  homepage: "https://hookline.vante.app/docs/cli",
   repository: {
     type: "git",
     url: "git+https://github.com/kaanxsrd/hookline.git",
@@ -43,7 +43,7 @@ for (const a of artifacts.filter((x) => x.type === "Binary")) {
   const os = OS[a.goos ?? ""];
   const cpu = CPU[a.goarch ?? ""];
   if (!os || !cpu) continue;
-  const name = `@hookline/cli-${os}-${cpu}`;
+  const name = `hookline-cli-${os}-${cpu}`;
   const dir = path.join(out, `cli-${os}-${cpu}`);
   const exe = os === "win32" ? "hookline.exe" : "hookline";
   mkdirSync(path.join(dir, "bin"), { recursive: true });
@@ -55,7 +55,7 @@ for (const a of artifacts.filter((x) => x.type === "Binary")) {
       {
         name,
         ...common,
-        description: `The hookline CLI binary for ${os} ${cpu}. Install @hookline/cli instead.`,
+        description: `The hookline CLI binary for ${os} ${cpu}. Install hookline-cli instead.`,
         os: [os],
         cpu: [cpu],
         files: ["bin"],
@@ -84,7 +84,7 @@ writeFileSync(
   path.join(launcher, "package.json"),
   `${JSON.stringify(
     {
-      name: "@hookline/cli",
+      name: "hookline-cli",
       ...common,
       description: "Catch every webhook. Replay anything. Pipe it to localhost.",
       keywords: ["webhooks", "tunnel", "cli", "localhost", "stripe", "github"],
@@ -100,4 +100,4 @@ writeFileSync(
 );
 
 console.log(`npm packages for ${version} in ${path.relative(root, out)}:`);
-for (const name of [...Object.keys(optional), "@hookline/cli"]) console.log(`  ${name}`);
+for (const name of [...Object.keys(optional), "hookline-cli"]) console.log(`  ${name}`);

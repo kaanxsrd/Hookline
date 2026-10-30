@@ -92,4 +92,4 @@ release:
   footer: |
     **Server images:** `ghcr.io/kaanxsrd/hookline-{web,edge,worker,migrate}:{{ .Version }}`
 
-    **CLI:** `brew install --cask kaanxsrd/tap/hookline` · `scoop bucket add hookline https://github.com/kaanxsrd/scoop-bucket && scoop install hookline` · `npm install -g @hookline/cli`
+    **CLI:** `brew install --cask kaanxsrd/tap/hookline` · `scoop bucket add hookline https://github.com/kaanxsrd/scoop-bucket && scoop install hookline` · `npm install -g hookline-cli`

@@ -28,7 +28,7 @@ hookline listen k3Jx9QpL2mWa --forward http://localhost:3000/api/webhooks
 brew install --cask kaanxsrd/tap/hookline       # macOS
 scoop bucket add hookline https://github.com/kaanxsrd/scoop-bucket
 scoop install hookline                           # Windows
-npm install -g @hookline/cli                     # anywhere with Node 18+
+npm install -g hookline-cli                     # anywhere with Node 18+
 ```
 
 Archives for macOS, Linux and Windows are on the [releases page](https://github.com/kaanxsrd/hookline/releases). Then run `hookline login`, and see the [CLI guide](apps/web/app/docs/%28guides%29/cli/page.mdx) (served at `/docs/cli`) for everything else.

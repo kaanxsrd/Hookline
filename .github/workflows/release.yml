@@ -7,7 +7,7 @@ name: Release
 # Repository settings used here:
 #   secrets.HOMEBREW_TAP_TOKEN  push access to kaanxsrd/homebrew-tap (optional)
 #   secrets.SCOOP_BUCKET_TOKEN  push access to kaanxsrd/scoop-bucket (optional)
-#   secrets.NPM_TOKEN           publish rights for the @hookline npm scope (optional)
+#   secrets.NPM_TOKEN           publish rights for hookline-cli and hookline-cli-* on npm (optional)
 #   vars.HOOKLINE_DEFAULT_URL   the instance release CLIs talk to by default
 
 on:
@@ -91,11 +91,21 @@ jobs:
 
       - name: Publish (platform packages first, then the launcher)
         if: env.NODE_AUTH_TOKEN != ''
+        env:
+          # npm signs provenance only for public source repositories.
+          PROVENANCE: ${{ github.event.repository.private && '' || '--provenance' }}
         run: |
           tag=latest
           case "$GITHUB_REF_NAME" in *-*) tag=next ;; esac
           for dir in dist/npm/cli-*/ dist/npm/cli/; do
-            (cd "$dir" && npm publish --access public --provenance --tag "$tag")
+            # A re-run skips versions that are already on npm.
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already published"
+              continue
+            fi
+            (cd "$dir" && npm publish --access public $PROVENANCE --tag "$tag")
           done
 
   images:

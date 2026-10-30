@@ -61,7 +61,7 @@ func upgradeHint(exe string) string {
 	case strings.Contains(p, "/scoop/"):
 		return "scoop update hookline"
 	case strings.Contains(p, "/node_modules/"):
-		return "npm install -g @hookline/cli@latest"
+		return "npm install -g hookline-cli@latest"
 	}
 	return ""
 }
