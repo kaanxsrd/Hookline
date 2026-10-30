@@ -15,7 +15,7 @@
     },
     "apps/web": {
       "name": "@hookline/web",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "dependencies": {
         "@aws-sdk/client-s3": "3.1159.0",
         "@better-auth/passkey": "1.7.14",
@@ -77,11 +77,11 @@
     },
     "cli": {
       "name": "@hookline/cli",
-      "version": "0.0.0",
+      "version": "1.0.0",
     },
     "packages/db": {
       "name": "@hookline/db",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "dependencies": {
         "better-auth": "1.7.14",
         "drizzle-orm": "0.45.4",
@@ -95,18 +95,18 @@
     },
     "packages/gocommon": {
       "name": "@hookline/gocommon",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "dependencies": {
         "@hookline/db": "workspace:*",
       },
     },
     "packages/protocol": {
       "name": "@hookline/protocol",
-      "version": "0.0.0",
+      "version": "1.0.0",
     },
     "packages/shared": {
       "name": "@hookline/shared",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "devDependencies": {
         "@types/bun": "1.4.4",
         "typescript": "6.0.3",
@@ -114,14 +114,14 @@
     },
     "services/edge": {
       "name": "@hookline/edge",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "dependencies": {
         "@hookline/gocommon": "workspace:*",
       },
     },
     "services/worker": {
       "name": "@hookline/worker",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "dependencies": {
         "@hookline/gocommon": "workspace:*",
       },

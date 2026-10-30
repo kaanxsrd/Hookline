@@ -136,7 +136,7 @@ Everything can run in one Railway project, on Railway's private network: the web
 
 ## Releases
 
-One version covers the whole product. Pushing a tag such as `v0.1.0` runs `.github/workflows/release.yml`:
+One version covers the whole product. Pushing a tag such as `v1.0.0` runs `.github/workflows/release.yml`:
 
 - **CLI:** goreleaser (`.goreleaser.yaml`) builds macOS, Linux and Windows binaries for x64 and arm64, publishes archives and checksums on the GitHub release, and updates the Homebrew cask in `kaanxsrd/homebrew-tap` and the Scoop manifest in `kaanxsrd/scoop-bucket`. `scripts/release/npm.ts` turns the binaries into `@hookline/cli`, a small launcher, plus one optional package per platform (no install script). Release builds talk to `vars.HOOKLINE_DEFAULT_URL` by default.
 - **Images:** `web`, `edge`, `worker` and `migrate` for `linux/amd64` and `linux/arm64` go to GHCR, tagged with the version, `major.minor` and `latest` (not for pre-releases such as `v0.2.0-rc.1`), with provenance and an SBOM.

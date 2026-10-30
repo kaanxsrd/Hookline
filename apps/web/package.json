@@ -1,6 +1,6 @@
 {
   "name": "@hookline/web",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Hookline web app: marketing site, docs, dashboard and public API.",
   "license": "GPL-3.0-only",
