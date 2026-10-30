@@ -5,6 +5,7 @@ import { RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import { StatusPill, type Tone } from "@/components/status-pill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,16 +34,15 @@ import {
 } from "@/components/ui/table";
 import { attempt } from "@/lib/attempt";
 import { useTRPC } from "@/lib/trpc/client";
-import { cn } from "@/lib/utils";
 
 const STATUSES = ["pending", "succeeded", "failed", "cancelled"] as const;
 type Status = (typeof STATUSES)[number];
 
-const statusStyle: Record<Status, { label: string; className: string }> = {
-  succeeded: { label: "Delivered", className: "text-emerald-700 dark:text-emerald-300" },
-  failed: { label: "Failed", className: "text-destructive" },
-  pending: { label: "Retrying", className: "text-amber-700 dark:text-amber-300" },
-  cancelled: { label: "Cancelled", className: "text-muted-foreground" },
+const statusStyle: Record<Status, { label: string; tone: Tone }> = {
+  succeeded: { label: "Delivered", tone: "success" },
+  failed: { label: "Failed", tone: "danger" },
+  pending: { label: "Retrying", tone: "warning" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
 };
 
 const ALL = "all";
@@ -154,7 +154,7 @@ export function DeliveriesTable({
         )}
       </div>
 
-      <div className="rounded-lg border">
+      <div className="bg-card/30 overflow-hidden rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -190,9 +190,9 @@ export function DeliveriesTable({
                     </Link>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    <span className={cn("text-sm font-medium", style.className)}>
+                    <StatusPill tone={style.tone} pulse={d.status === "pending"}>
                       {style.label}
-                    </span>
+                    </StatusPill>
                     <span className="text-muted-foreground ml-2 text-xs">
                       {d.attemptCount}/{d.maxAttempts}
                     </span>

@@ -13,7 +13,7 @@ import type { AppRouter } from "@/server/routers/_app";
 
 type Usage = inferRouterOutputs<AppRouter>["usage"]["get"];
 
-const fmt = new Intl.NumberFormat();
+const fmt = new Intl.NumberFormat("en-US");
 
 /** A metric against its limit, with a bar; status color only with an icon and words. */
 function Meter({
@@ -31,19 +31,22 @@ function Meter({
   const state = !limit ? "ok" : used >= limit ? "over" : ratio >= 0.8 ? "near" : "ok";
   return (
     <div
-      className="grid gap-2 rounded-lg border p-4"
+      className="bg-card/30 grid gap-3 rounded-xl border p-5"
       data-testid={`meter-${label.toLowerCase().replace(/\s+/g, "-")}`}
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-sm font-medium">{label}</span>
-        <span className="text-muted-foreground text-xs tabular-nums">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <p className="flex items-baseline gap-1.5">
+        <span className="text-2xl font-semibold tracking-tight tabular-nums">
           {fmt.format(used)}
-          {unit ? ` ${unit}` : ""} {limit === null ? "· unlimited" : `of ${fmt.format(limit)}`}
         </span>
-      </div>
+        <span className="text-muted-foreground font-mono text-xs tabular-nums">
+          {unit ? `${unit} ` : ""}
+          {limit === null ? "· unlimited" : `of ${fmt.format(limit)}`}
+        </span>
+      </p>
       {limit !== null && (
         <div
-          className="bg-muted h-2 overflow-hidden rounded-full"
+          className="bg-muted h-1.5 overflow-hidden rounded-full"
           role="progressbar"
           aria-label={label}
           aria-valuemin={0}
@@ -88,16 +91,16 @@ function DailyChart({ daily }: { daily: Usage["daily"] }) {
   const bar = Math.max(2, (width - gap * (daily.length - 1)) / Math.max(1, daily.length));
   const hovered = hover !== null ? daily[hover] : undefined;
   const label = (day: string) =>
-    new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
+    new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       timeZone: "UTC",
     });
 
   return (
-    <section className="grid gap-3" aria-labelledby="daily-title">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 id="daily-title" className="font-medium">
+    <section className="bg-card/30 grid gap-4 rounded-xl border p-5" aria-labelledby="daily-title">
+      <div className="flex items-center justify-between gap-2">
+        <h2 id="daily-title" className="text-sm font-medium">
           Requests per day
         </h2>
         <Button variant="ghost" size="sm" onClick={() => setTable((t) => !t)}>
@@ -206,7 +209,7 @@ export function UsageView({
     initialData: initial,
     refetchInterval: 60_000,
   });
-  const period = `${new Date(`${data.period_start}T00:00:00Z`).toLocaleDateString(undefined, { month: "long", day: "numeric", timeZone: "UTC" })} – ${new Date(`${data.period_end}T00:00:00Z`).toLocaleDateString(undefined, { month: "long", day: "numeric", timeZone: "UTC" })}`;
+  const period = `${new Date(`${data.period_start}T00:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" })} – ${new Date(`${data.period_end}T00:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" })}`;
 
   return (
     <div className="grid gap-8">
@@ -232,26 +235,39 @@ export function UsageView({
           ["Deliveries", fmt.format(data.deliveries)],
           ["Tunnel minutes", fmt.format(data.tunnel_minutes)],
         ].map(([k, v]) => (
-          <div key={k} className="rounded-lg border p-4">
+          <div key={k} className="bg-card/30 rounded-xl border p-5">
             <dt className="text-muted-foreground text-xs">{k}</dt>
-            <dd className="mt-1 text-2xl font-semibold tabular-nums">{v}</dd>
+            <dd className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{v}</dd>
           </div>
         ))}
       </dl>
       <DailyChart daily={data.daily} />
-      <section className="grid gap-2">
-        <h2 className="font-medium">Plan limits</h2>
-        <ul className="text-muted-foreground grid gap-1 text-sm sm:grid-cols-2">
-          <li>
-            Retention:{" "}
-            {data.limits.retentionHours < 48
-              ? `${data.limits.retentionHours} hours`
-              : `${Math.round(data.limits.retentionHours / 24)} days`}
-          </li>
-          <li>Largest body: {formatBytes(data.limits.maxBodyBytes)}</li>
-          <li>Concurrent CLI tunnels: {data.limits.concurrentTunnels ?? "unlimited"}</li>
-          <li>Destinations per endpoint: {data.limits.destinationsPerEndpoint ?? "unlimited"}</li>
-        </ul>
+      <section className="grid gap-3">
+        <h2 className="text-sm font-medium">Plan limits</h2>
+        <dl className="bg-card/30 grid overflow-hidden rounded-xl border text-sm sm:grid-cols-2">
+          {[
+            [
+              "Retention",
+              data.limits.retentionHours < 48
+                ? `${data.limits.retentionHours} hours`
+                : `${Math.round(data.limits.retentionHours / 24)} days`,
+            ],
+            ["Largest body", formatBytes(data.limits.maxBodyBytes)],
+            ["Concurrent CLI tunnels", String(data.limits.concurrentTunnels ?? "unlimited")],
+            [
+              "Destinations per endpoint",
+              String(data.limits.destinationsPerEndpoint ?? "unlimited"),
+            ],
+          ].map(([k, v]) => (
+            <div
+              key={k}
+              className="-mb-px flex items-center justify-between gap-3 border-b px-4 py-3 sm:odd:border-r"
+            >
+              <dt className="text-muted-foreground">{k}</dt>
+              <dd className="font-mono text-xs">{v}</dd>
+            </div>
+          ))}
+        </dl>
         <p className="text-muted-foreground text-xs">
           Daily totals are rolled up hourly; today's requests and the request limit are counted
           live.

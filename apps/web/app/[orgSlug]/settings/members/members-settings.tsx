@@ -101,7 +101,7 @@ export function MembersSettings({ orgSlug }: { orgSlug: string }) {
 
       <section className="grid gap-3">
         <h2 className="font-medium">Members ({members.length})</h2>
-        <ul className="divide-y rounded-lg border">
+        <ul className="bg-card/30 divide-y overflow-hidden rounded-xl border">
           {members.map((m) => (
             <li key={m.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
               <Avatar className="size-8">
@@ -161,7 +161,7 @@ export function MembersSettings({ orgSlug }: { orgSlug: string }) {
       {isAdmin && invitations.length > 0 && (
         <section className="grid gap-3">
           <h2 className="font-medium">Pending invitations</h2>
-          <ul className="divide-y rounded-lg border">
+          <ul className="bg-card/30 divide-y overflow-hidden rounded-xl border">
             {invitations.map((i) => (
               <li key={i.id} className="flex items-center gap-3 px-4 py-3 text-sm">
                 <span className="min-w-0 flex-1 truncate">{i.email}</span>

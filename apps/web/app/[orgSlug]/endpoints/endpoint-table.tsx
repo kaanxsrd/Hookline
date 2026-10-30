@@ -1,12 +1,13 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { ArrowDownUp, Pause, Play, Search, Trash2 } from "lucide-react";
+import { ArrowDownUp, Pause, Play, Search, Trash2, Webhook } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CopyButton } from "@/components/copy-button";
+import { EmptyState } from "@/components/empty-state";
 import { RelativeTime } from "@/components/inbox/relative-time";
 import { Sparkline } from "@/components/sparkline";
 import { EndpointStatusBadge } from "@/components/status-badge";
@@ -126,9 +127,9 @@ export function EndpointTable({
 
   if (endpoints.length === 0) {
     return (
-      <div className="text-muted-foreground rounded-lg border border-dashed px-6 py-12 text-center text-sm">
-        No endpoints yet. Create one to get a URL that captures every request.
-      </div>
+      <EmptyState icon={Webhook} title="No endpoints yet">
+        Create one to get a URL that captures every request.
+      </EmptyState>
     );
   }
 
@@ -179,7 +180,7 @@ export function EndpointTable({
           </div>
         )}
       </div>
-      <div className="rounded-lg border">
+      <div className="bg-card/30 overflow-hidden rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>

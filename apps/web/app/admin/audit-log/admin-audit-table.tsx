@@ -30,7 +30,7 @@ export function AdminAuditTable() {
   return (
     <div className="grid gap-4">
       <SearchBox value={action} onChange={setAction} label="Filter by action, e.g. admin.user" />
-      <div className="rounded-lg border">
+      <div className="bg-card/30 overflow-hidden rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>

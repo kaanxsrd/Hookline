@@ -31,7 +31,7 @@ export function UsersTable() {
   return (
     <div className="grid gap-4">
       <SearchBox value={q} onChange={setQ} label="Search by name or email" />
-      <div className="rounded-lg border">
+      <div className="bg-card/30 overflow-hidden rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>

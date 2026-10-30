@@ -1,24 +1,12 @@
-import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/status-pill";
 
-const labels = {
-  active: "Active",
-  paused: "Paused",
-  disabled_by_admin: "Disabled",
+const states = {
+  active: { label: "Active", tone: "success" },
+  paused: { label: "Paused", tone: "warning" },
+  disabled_by_admin: { label: "Disabled", tone: "danger" },
 } as const;
 
-export function EndpointStatusBadge({ status }: { status: keyof typeof labels }) {
-  return (
-    <Badge
-      variant={status === "active" ? "secondary" : "outline"}
-      className={
-        status === "active"
-          ? "text-emerald-700 dark:text-emerald-300"
-          : status === "paused"
-            ? "text-amber-700 dark:text-amber-300"
-            : "text-destructive"
-      }
-    >
-      {labels[status]}
-    </Badge>
-  );
+export function EndpointStatusBadge({ status }: { status: keyof typeof states }) {
+  const s = states[status];
+  return <StatusPill tone={s.tone}>{s.label}</StatusPill>;
 }

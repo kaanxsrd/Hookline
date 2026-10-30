@@ -57,7 +57,7 @@ const EXPIRY = [
 
 function when(d: Date | null): string {
   return d
-    ? d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+    ? d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
     : "—";
 }
 
@@ -123,7 +123,7 @@ export function ApiKeysSettings({ orgSlug }: { orgSlug: string }) {
         </Button>
       </div>
 
-      <div className="rounded-lg border">
+      <div className="bg-card/30 overflow-hidden rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -188,7 +188,11 @@ export function ApiKeysSettings({ orgSlug }: { orgSlug: string }) {
             {keys.data?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-muted-foreground py-10 text-center">
-                  No API keys yet. `hookline login` creates one for the CLI.
+                  No API keys yet.{" "}
+                  <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+                    hookline login
+                  </code>{" "}
+                  creates one for the CLI.
                 </TableCell>
               </TableRow>
             )}

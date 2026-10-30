@@ -78,7 +78,7 @@ export function EndpointsTable({
           </SelectContent>
         </Select>
       </div>
-      <div className="rounded-lg border">
+      <div className="bg-card/30 overflow-hidden rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>

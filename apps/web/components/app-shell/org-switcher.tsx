@@ -38,13 +38,15 @@ export function OrgSwitcher({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger className="hover:bg-accent flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left">
-          <span className="bg-primary text-primary-foreground flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold">
+        <DropdownMenuTrigger className="hover:bg-accent/60 flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition-colors">
+          <span className="from-primary to-brand-cyan text-primary-foreground flex size-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-xs font-semibold shadow-[0_0_16px_-4px_var(--primary)]">
             {org.name.slice(0, 1).toUpperCase()}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{org.name}</span>
-            <span className="text-muted-foreground block text-xs capitalize">{org.plan} plan</span>
+            <span className="text-muted-foreground block font-mono text-[10px] tracking-wide uppercase">
+              {org.plan} plan
+            </span>
           </span>
           <ChevronsUpDown className="text-muted-foreground size-4" aria-hidden />
         </DropdownMenuTrigger>
