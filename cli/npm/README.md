@@ -10,4 +10,4 @@ hookline listen <slug> --forward http://localhost:3000/api/webhooks
 
 This package installs a native binary for your platform (macOS, Linux and Windows on x64 and arm64) through an optional dependency. No install script runs.
 
-Documentation: https://github.com/kaanxsrd/hookline · License: MIT
+Documentation: https://github.com/kaanxsrd/hookline · License: GPL-3.0-only

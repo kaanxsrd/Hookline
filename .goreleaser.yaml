@@ -61,7 +61,7 @@ homebrew_casks:
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://github.com/kaanxsrd/hookline
     description: Catch every webhook. Replay anything. Pipe it to localhost.
-    license: MIT
+    license: GPL-3.0-only
     # Without a tap token (forks, snapshots) the cask is skipped.
     skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
     hooks:
@@ -80,7 +80,7 @@ scoops:
       token: "{{ .Env.SCOOP_BUCKET_TOKEN }}"
     homepage: https://github.com/kaanxsrd/hookline
     description: Catch every webhook. Replay anything. Pipe it to localhost.
-    license: MIT
+    license: GPL-3.0-only
     skip_upload: '{{ if index .Env "SCOOP_BUCKET_TOKEN" }}false{{ else }}true{{ end }}'
 
 release:

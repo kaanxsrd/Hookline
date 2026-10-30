@@ -17,8 +17,8 @@ info:
     - **Pagination:** list endpoints take `cursor` and `limit` and return `next_cursor` (null on
       the last page).
   license:
-    name: MIT
-    url: https://opensource.org/licenses/MIT
+    name: GPL-3.0-only
+    url: https://www.gnu.org/licenses/gpl-3.0.html
 servers:
   - url: /api/v1
     description: This Hookline instance

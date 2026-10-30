@@ -27,7 +27,7 @@ const CPU: Record<string, string> = { amd64: "x64", arm64: "arm64" };
 
 const common = {
   version,
-  license: "MIT",
+  license: "GPL-3.0-only",
   homepage: "https://github.com/kaanxsrd/hookline",
   repository: {
     type: "git",

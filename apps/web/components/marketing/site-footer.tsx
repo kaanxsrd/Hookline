@@ -9,8 +9,8 @@ export function SiteFooter() {
         <div className="text-muted-foreground space-y-3 text-sm">
           <Logo className="text-foreground" />
           <p className="max-w-xs">
-            Catch every webhook. Replay anything. Pipe it to localhost. Open source under the MIT
-            license.
+            Catch every webhook. Replay anything. Pipe it to localhost. Free software under the GNU
+            General Public License v3.0.
           </p>
           <a
             href={REPOSITORY_URL}

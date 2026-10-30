@@ -168,7 +168,7 @@ export default function HomePage() {
               Free to start, open source forever
             </h2>
             <p className="text-muted-foreground mt-2">
-              Use the hosted service, or run the whole stack yourself under the MIT license.
+              Use the hosted service, or run the whole stack yourself under the GNU GPL v3.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">

@@ -34,7 +34,7 @@ const FAQ = [
   },
   {
     q: "Can I run Hookline myself?",
-    a: "Yes. Hookline is open source under the MIT license. Self-hosted instances usually lift every limit with PLAN_OVERRIDE=unlimited.",
+    a: "Yes. Hookline is free software under the GNU GPL v3. Self-hosted instances usually lift every limit with PLAN_OVERRIDE=unlimited.",
   },
 ];
 

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Hookline database schema (Drizzle), migrations and seed data.",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

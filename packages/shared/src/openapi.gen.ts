@@ -8,7 +8,7 @@ export const openapiDocument: Record<string, unknown> = {
     version: "1.0.0",
     description:
       'The Hookline REST API. Authenticate with an API key (`Authorization: Bearer hk_live_...`)\ncreated under **Settings → API keys** or by `hookline login`. Each key belongs to one\norganization and carries scopes.\n\n- **Errors** share one shape: `{"error": {"code", "message", "details"?}}`.\n- **Idempotency:** every authenticated `POST` accepts an `Idempotency-Key` header (1–255\n  characters). Repeating a request with the same key within 24 hours returns the first\n  response (with `Idempotent-Replayed: true`) instead of acting twice; reusing a key for a\n  different request is rejected with `422`.\n- **Rate limits** apply per key; every response carries `RateLimit-Limit`,\n  `RateLimit-Remaining` and `RateLimit-Reset`. Over the limit you get `429` with `Retry-After`.\n- **Pagination:** list endpoints take `cursor` and `limit` and return `next_cursor` (null on\n  the last page).\n',
-    license: { name: "MIT", url: "https://opensource.org/licenses/MIT" },
+    license: { name: "GPL-3.0-only", url: "https://www.gnu.org/licenses/gpl-3.0.html" },
   },
   servers: [{ url: "/api/v1", description: "This Hookline instance" }],
   security: [{ apiKey: [] }],

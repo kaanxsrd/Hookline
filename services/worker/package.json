@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Go worker: forwarding, retries, retention, rollups.",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "scripts": {
     "dev": "bun ../../scripts/go.ts dev",
     "lint": "bun ../../scripts/go.ts lint",

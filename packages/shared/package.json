@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "TypeScript code shared across Hookline packages: entitlements and contracts.",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Hookline web app: marketing site, docs, dashboard and public API.",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "scripts": {
     "dev": "bun ../../scripts/with-env.ts next dev --port 3000",
     "build": "next build",

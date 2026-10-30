@@ -2,7 +2,7 @@
 
 **Catch every webhook. Replay anything. Pipe it to localhost.**
 
-Hookline gives you a URL that captures any HTTP request, shows it live, lets you inspect, replay and forward it, and pipes it to localhost through a CLI tunnel. It is open source under the MIT license: use the hosted service or run the whole stack yourself.
+Hookline gives you a URL that captures any HTTP request, shows it live, lets you inspect, replay and forward it, and pipes it to localhost through a CLI tunnel. It is free software under the GNU General Public License v3.0: use the hosted service or run the whole stack yourself.
 
 ```sh
 hookline listen k3Jx9QpL2mWa --forward http://localhost:3000/api/webhooks
@@ -130,4 +130,4 @@ Read [`CONTRIBUTING.md`](CONTRIBUTING.md) for conventions, database changes, tes
 
 ## License
 
-[MIT](LICENSE)
+[GNU General Public License v3.0](LICENSE). Hookline is free software: you can redistribute and modify it under the terms of the GPL, version 3. It comes with no warranty.

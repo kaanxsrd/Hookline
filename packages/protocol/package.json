@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Tunnel protocol hookline.v1: message types and constants (Go).",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "scripts": {
     "lint": "bun ../../scripts/go.ts lint",
     "test": "bun ../../scripts/go.ts test",
