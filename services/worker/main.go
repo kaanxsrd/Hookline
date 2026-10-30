@@ -86,12 +86,17 @@ func run() error {
 		Rand:      rand.Float64,
 	})
 	var sender mail.Sender = mail.Discard{}
-	if cfg.SMTPURL != "" {
+	switch {
+	case cfg.GraphEnabled():
+		if sender, err = mail.NewGraph(cfg.GraphTenant, cfg.GraphClientID, cfg.GraphSecret, cfg.MailFrom); err != nil {
+			return err
+		}
+	case cfg.SMTPURL != "":
 		if sender, err = mail.NewSMTP(cfg.SMTPURL, cfg.MailFrom); err != nil {
 			return err
 		}
-	} else {
-		logger.WarnContext(ctx, "SMTP_URL is not set; notification emails are disabled")
+	default:
+		logger.WarnContext(ctx, "neither SMTP_URL nor Microsoft Graph is configured; notification emails are disabled")
 	}
 	notifications := &notify.Deps{
 		Queries: queries, Mail: sender, AppURL: cfg.AppURL, PlanOverride: cfg.PlanOverride, Logger: logger, Now: time.Now,

@@ -132,7 +132,7 @@ Everything can run in one Railway project, on Railway's private network: the web
 
 **The web app on Vercel instead.** Import the repository with Root Directory `apps/web`; `apps/web/vercel.json` pins functions to `fra1` and skips builds when only Go code changed. Enable Railway's TCP proxies on Postgres and Redis and use their public URLs (`?sslmode=require` on the database URL), `DATABASE_POOL_MAX=3`, `EDGE_INTERNAL_URL` set to the edge's public URL, and `CLIENT_IP_HEADER` unset (Vercel sets `X-Forwarded-For` to the client). Background emails use `after()`, so Vercel keeps a function alive until they are sent. Vercel's Hobby plan is for non-commercial use, and Redis traffic through Railway's TCP proxy is not encrypted.
 
-**Email** works with any SMTP provider. Microsoft 365 (`smtp.office365.com:587`) needs SMTP AUTH turned on for the mailbox; the URL is `smtp://user%40domain:password@smtp.office365.com:587` (the `@` in the user name becomes `%40`), and `MAIL_FROM` must be that mailbox or one it may send as. Both the web app and the worker support the `LOGIN` mechanism Microsoft 365 requires.
+**Email on Railway.** Railway blocks outbound SMTP below the Pro plan (connections to port 587 simply time out), so on Hobby send through an HTTPS API: with a Microsoft 365 mailbox, use [Microsoft Graph](#microsoft-graph); otherwise upgrade to Pro for SMTP.
 
 ## Releases
 
@@ -158,7 +158,26 @@ Set `SMTP_URL` (`smtp://user:pass@host:587` uses STARTTLS when offered, `smtps:/
 - **Deliveries failing:** when a delivery fails after its last attempt, at most once an hour per destination.
 - **Usage:** when an organization passes 80 % and 100 % of its monthly requests, once each per month (checked after the hourly usage rollup).
 
-Without `SMTP_URL` the worker logs that notifications are disabled and skips them. The notification templates are React Email components in `apps/web/emails`; `bun run gen` renders them into Go templates (`packages/gocommon/mail/templates`), so both services send the same design.
+Without `SMTP_URL` (or Graph) the worker logs that notifications are disabled and skips them. The notification templates are React Email components in `apps/web/emails`; `bun run gen` renders them into Go templates (`packages/gocommon/mail/templates`), so both services send the same design.
+
+Microsoft 365 over SMTP (`smtp.office365.com:587`) needs SMTP AUTH turned on for the mailbox; the URL is `smtp://user%40domain:password@smtp.office365.com:587` (the `@` in the user name becomes `%40`), and `MAIL_FROM` must be that mailbox or one it may send as. Both services support the `LOGIN` mechanism Microsoft 365 requires.
+
+### Microsoft Graph
+
+Where outbound SMTP is blocked (Railway below Pro), the web app and the worker send through Microsoft Graph over HTTPS instead, as the `MAIL_FROM` mailbox. Setting all three of `MS_GRAPH_TENANT_ID`, `MS_GRAPH_CLIENT_ID` and `MS_GRAPH_CLIENT_SECRET` switches both services to Graph; `SMTP_URL` is then ignored.
+
+1. In the Microsoft Entra admin center, **App registrations → New registration**: any name, single tenant, no redirect URI.
+2. **API permissions → Add a permission → Microsoft Graph → Application permissions → `Mail.Send`**, then **Grant admin consent**.
+3. **Certificates & secrets → New client secret**; copy its **Value** (shown once). Note its expiry: mail stops when it expires.
+4. From **Overview**, copy the **Directory (tenant) ID** and **Application (client) ID**.
+5. `Mail.Send` as an application permission can send as any mailbox in the tenant. Limit it to the one Hookline uses, in Exchange Online PowerShell:
+
+   ```powershell
+   New-ApplicationAccessPolicy -AppId <client id> -PolicyScopeGroupId contact@example.com `
+     -AccessRight RestrictAccess -Description "Hookline sends only as contact@"
+   ```
+
+Messages go out with the HTML body only and are not saved to Sent Items. Errors from Graph (for example `ErrorAccessDenied` before consent) are logged as "email delivery failed" by the web app and the worker.
 
 ## Billing with Stripe
 
