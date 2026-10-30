@@ -87,8 +87,8 @@ func run() error {
 	})
 	var sender mail.Sender = mail.Discard{}
 	switch {
-	case cfg.GraphEnabled():
-		if sender, err = mail.NewGraph(cfg.GraphTenant, cfg.GraphClientID, cfg.GraphSecret, cfg.MailFrom); err != nil {
+	case cfg.ResendAPIKey != "":
+		if sender, err = mail.NewResend(cfg.ResendAPIKey, cfg.MailFrom); err != nil {
 			return err
 		}
 	case cfg.SMTPURL != "":
@@ -96,7 +96,7 @@ func run() error {
 			return err
 		}
 	default:
-		logger.WarnContext(ctx, "neither SMTP_URL nor Microsoft Graph is configured; notification emails are disabled")
+		logger.WarnContext(ctx, "neither RESEND_API_KEY nor SMTP_URL is set; notification emails are disabled")
 	}
 	notifications := &notify.Deps{
 		Queries: queries, Mail: sender, AppURL: cfg.AppURL, PlanOverride: cfg.PlanOverride, Logger: logger, Now: time.Now,

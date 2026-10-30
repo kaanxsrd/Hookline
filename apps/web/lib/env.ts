@@ -26,13 +26,12 @@ const schema = z.object({
     .default("false")
     .transform((v) => v === "true"),
   MAIL_FROM: z.string().min(3).default("Hookline <no-reply@hookline.localhost>"),
-  /**
-   * Microsoft Graph (HTTPS) instead of SMTP, as the MAIL_FROM mailbox: for
-   * hosts that block outbound SMTP. All three set means Graph is used.
-   */
-  MS_GRAPH_TENANT_ID: z.string().optional(),
-  MS_GRAPH_CLIENT_ID: z.string().optional(),
-  MS_GRAPH_CLIENT_SECRET: z.string().optional(),
+  /** Resend (HTTPS) instead of SMTP, for hosts that block outbound SMTP. */
+  RESEND_API_KEY: z
+    .string()
+    .regex(/^re_/, "must be a Resend API key (re_...)")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
   /** Better Auth's sign-in/sign-up rate limits. Only development and tests turn them off. */
   AUTH_RATE_LIMIT_ENABLED: z
     .enum(["true", "false"])

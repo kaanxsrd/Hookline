@@ -31,18 +31,11 @@ type Config struct {
 	DeliveryConcurrency int  // WORKER_DELIVERY_CONCURRENCY: deliveries in flight per process
 	AllowPrivate        bool // ALLOW_PRIVATE_DESTINATIONS: permit loopback/private destinations (self-hosted only)
 
-	SMTPURL  string // SMTP_URL: notification emails; empty disables them
-	MailFrom string // MAIL_FROM
-	// MS_GRAPH_TENANT_ID, MS_GRAPH_CLIENT_ID, MS_GRAPH_CLIENT_SECRET: send through
-	// Microsoft Graph (HTTPS) instead of SMTP, for hosts that block SMTP.
-	GraphTenant, GraphClientID, GraphSecret string
-	AppURL                                  string            // APP_URL: links in emails
-	PlanOverride                            entitlements.Plan // PLAN_OVERRIDE: "unlimited" on self-hosted instances
-}
-
-// GraphEnabled reports whether email goes through Microsoft Graph.
-func (c Config) GraphEnabled() bool {
-	return c.GraphTenant != "" && c.GraphClientID != "" && c.GraphSecret != ""
+	SMTPURL      string            // SMTP_URL: notification emails; empty disables them
+	ResendAPIKey string            // RESEND_API_KEY: send through Resend (HTTPS) instead of SMTP
+	MailFrom     string            // MAIL_FROM
+	AppURL       string            // APP_URL: links in emails
+	PlanOverride entitlements.Plan // PLAN_OVERRIDE: "unlimited" on self-hosted instances
 }
 
 // S3Enabled reports whether object storage is configured.
@@ -72,13 +65,10 @@ func Load(l *config.Loader) (Config, error) {
 		AppURL:              l.String("APP_URL", "http://localhost:3000"),
 		PlanOverride:        entitlements.Plan(l.OneOf("PLAN_OVERRIDE", "", "", string(entitlements.PlanUnlimited))),
 	}
-	c.GraphTenant = l.String("MS_GRAPH_TENANT_ID", "")
-	c.GraphClientID = l.String("MS_GRAPH_CLIENT_ID", "")
-	c.GraphSecret = l.String("MS_GRAPH_CLIENT_SECRET", "")
-	// Any of the three set means Graph is intended: all three are then required.
-	if c.GraphTenant+c.GraphClientID+c.GraphSecret != "" {
-		if _, err := mail.NewGraph(c.GraphTenant, c.GraphClientID, c.GraphSecret, c.MailFrom); err != nil {
-			l.Fail("MS_GRAPH_CLIENT_ID", "%v", err)
+	c.ResendAPIKey = l.String("RESEND_API_KEY", "")
+	if c.ResendAPIKey != "" {
+		if _, err := mail.NewResend(c.ResendAPIKey, c.MailFrom); err != nil {
+			l.Fail("RESEND_API_KEY", "%v", err)
 		}
 	} else if c.SMTPURL != "" {
 		if _, err := mail.NewSMTP(c.SMTPURL, c.MailFrom); err != nil {
