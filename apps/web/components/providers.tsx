@@ -1,5 +1,6 @@
 "use client";
 
+import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -16,10 +17,13 @@ export function Providers({ nonce, children }: { nonce: string | undefined; chil
       {...(nonce ? { nonce } : {})}
     >
       <TRPCReactProvider>
-        <TooltipProvider delayDuration={300}>
-          {children}
-          <Toaster position="bottom-right" />
-        </TooltipProvider>
+        {/* Every motion animation honours the visitor's reduced-motion setting. */}
+        <MotionConfig reducedMotion="user">
+          <TooltipProvider delayDuration={300}>
+            {children}
+            <Toaster position="bottom-right" />
+          </TooltipProvider>
+        </MotionConfig>
       </TRPCReactProvider>
     </ThemeProvider>
   );

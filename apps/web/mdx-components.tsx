@@ -60,10 +60,11 @@ export function Callout({
     <div
       role="note"
       className={cn(
-        "my-6 rounded-lg border px-4 py-3 text-sm [&>p]:my-0",
+        "relative my-6 overflow-hidden rounded-xl border py-3 pr-4 pl-5 text-sm [&>p]:my-0",
+        "before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-gradient-to-b",
         kind === "warning"
-          ? "border-amber-500/40 bg-amber-500/10"
-          : "border-primary/30 bg-primary/5",
+          ? "border-amber-500/30 bg-amber-500/5 before:from-amber-400 before:to-orange-500"
+          : "border-primary/25 bg-primary/5 before:from-primary before:to-brand-cyan",
       )}
     >
       {children}
@@ -73,9 +74,11 @@ export function Callout({
 
 const components: MDXComponents = {
   h1: ({ children }) => (
-    <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{children}</h1>
+    <h1 className="text-gradient text-4xl font-semibold tracking-tighter text-balance sm:text-5xl">
+      {children}
+    </h1>
   ),
-  h2: heading("h2", "mt-12 mb-4 border-b pb-2 text-2xl"),
+  h2: heading("h2", "mt-14 mb-4 border-b pb-3 text-2xl"),
   h3: heading("h3", "mt-8 mb-3 text-lg"),
   p: ({ children }) => <p className="my-4 leading-7">{children}</p>,
   a: Anchor,
@@ -87,22 +90,36 @@ const components: MDXComponents = {
   ),
   hr: () => <hr className="my-10" />,
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  // Code blocks read as a terminal window in both themes.
   pre: ({ children }) => (
-    <pre className="bg-card my-6 overflow-x-auto rounded-lg border p-4 font-mono text-sm leading-6 [&>code]:bg-transparent [&>code]:p-0">
-      {children}
-    </pre>
+    <div className="my-6 overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-[0_0_40px_-24px_var(--primary)]">
+      <div aria-hidden className="flex gap-1.5 border-b border-white/10 px-4 py-2.5">
+        <span className="size-2.5 rounded-full bg-white/15" />
+        <span className="size-2.5 rounded-full bg-white/15" />
+        <span className="size-2.5 rounded-full bg-white/15" />
+      </div>
+      <pre className="overflow-x-auto p-4 font-mono text-[13px] leading-6 text-zinc-200 [&>code]:border-0 [&>code]:bg-transparent [&>code]:p-0 [&>code]:[font-size:inherit] [&>code]:text-inherit">
+        {children}
+      </pre>
+    </div>
   ),
   code: ({ children }) => (
-    <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-[0.875em]">{children}</code>
+    <code className="bg-muted text-foreground rounded-md border px-1.5 py-0.5 font-mono text-[0.85em]">
+      {children}
+    </code>
   ),
   table: ({ children }) => (
-    <div className="my-6 w-full overflow-x-auto rounded-lg border">
+    <div className="bg-card/60 my-6 w-full overflow-x-auto rounded-xl border backdrop-blur">
       <table className="w-full text-sm">{children}</table>
     </div>
   ),
-  thead: ({ children }) => <thead className="bg-muted/50 text-left">{children}</thead>,
-  th: ({ children }) => <th className="px-3 py-2 font-medium whitespace-nowrap">{children}</th>,
-  td: ({ children }) => <td className="border-t px-3 py-2 align-top">{children}</td>,
+  thead: ({ children }) => <thead className="bg-muted/40 text-left">{children}</thead>,
+  th: ({ children }) => (
+    <th className="px-4 py-2.5 text-xs font-medium tracking-wide whitespace-nowrap uppercase">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => <td className="border-t px-4 py-2.5 align-top">{children}</td>,
   Callout,
 };
 

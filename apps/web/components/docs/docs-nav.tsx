@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DOCS_NAV, DOCS_PAGES } from "@/lib/docs-nav";
@@ -12,7 +13,9 @@ export function DocsSidebar({ onNavigate }: { onNavigate?: () => void }) {
     <nav aria-label="Documentation" className="grid gap-6 text-sm">
       {DOCS_NAV.map((section) => (
         <div key={section.title}>
-          <h2 className="mb-2 px-2 text-xs font-medium tracking-wide uppercase">{section.title}</h2>
+          <h2 className="text-muted-foreground mb-2 px-3 font-mono text-[11px] tracking-widest uppercase">
+            {section.title}
+          </h2>
           <ul className="grid gap-0.5">
             {section.links.map(({ href, title }) => {
               const active = pathname === href;
@@ -23,13 +26,23 @@ export function DocsSidebar({ onNavigate }: { onNavigate?: () => void }) {
                     onClick={() => onNavigate?.()}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "block rounded-md px-2 py-1.5 transition-colors",
+                      "relative block rounded-md px-3 py-1.5 transition-colors",
                       active
-                        ? "bg-accent text-accent-foreground font-medium"
+                        ? "text-foreground font-medium"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {title}
+                    {active && (
+                      // Slides between pages as the reader moves through the docs.
+                      <motion.span
+                        layoutId="docs-active"
+                        className="bg-primary/10 border-primary/30 absolute inset-0 rounded-md border"
+                        transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                      >
+                        <span className="from-primary to-brand-cyan absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-gradient-to-b" />
+                      </motion.span>
+                    )}
+                    <span className="relative">{title}</span>
                   </Link>
                 </li>
               );
@@ -53,7 +66,7 @@ export function DocsPager() {
       {prev ? (
         <Link
           href={prev.href}
-          className="hover:bg-accent/50 rounded-lg border p-4 transition-colors"
+          className="group bg-card/60 hover:border-primary/40 rounded-xl border p-4 transition-all hover:shadow-[0_0_30px_-12px_var(--primary)]"
         >
           <span className="text-muted-foreground flex items-center gap-1 text-xs">
             <ArrowLeft className="size-3" aria-hidden /> Previous
@@ -66,7 +79,7 @@ export function DocsPager() {
       {next && (
         <Link
           href={next.href}
-          className="hover:bg-accent/50 rounded-lg border p-4 text-right transition-colors"
+          className="group bg-card/60 hover:border-primary/40 rounded-xl border p-4 text-right transition-all hover:shadow-[0_0_30px_-12px_var(--primary)]"
         >
           <span className="text-muted-foreground flex items-center justify-end gap-1 text-xs">
             Next <ArrowRight className="size-3" aria-hidden />
