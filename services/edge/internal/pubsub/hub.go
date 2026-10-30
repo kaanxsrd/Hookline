@@ -12,6 +12,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -53,6 +54,11 @@ func (s *Subscriber) close(reason string) {
 	})
 }
 
+// confirmTimeout bounds how long Subscribe waits for Redis to confirm a new
+// channel. Confirmation normally takes well under a millisecond; past this,
+// Subscribe returns anyway, as it did before confirmations were awaited.
+const confirmTimeout = 2 * time.Second
+
 // Hub multiplexes one Redis subscription across local viewers.
 type Hub struct {
 	ps     *redis.PubSub
@@ -61,22 +67,26 @@ type Hub struct {
 	mu     sync.Mutex
 	subs   map[string]map[*Subscriber]struct{}
 	closed bool
+	// pending holds a channel per Redis channel whose SUBSCRIBE has been sent
+	// but not yet confirmed; it is closed when the confirmation arrives.
+	pending map[string]chan struct{}
 }
 
 // NewHub returns a Hub on rdb. Call Run to start delivering messages.
 func NewHub(rdb *redis.Client, logger *slog.Logger) *Hub {
 	return &Hub{
 		// No channels yet: they are added as viewers subscribe.
-		ps:     rdb.Subscribe(context.Background()),
-		logger: logger,
-		subs:   map[string]map[*Subscriber]struct{}{},
+		ps:      rdb.Subscribe(context.Background()),
+		logger:  logger,
+		subs:    map[string]map[*Subscriber]struct{}{},
+		pending: map[string]chan struct{}{},
 	}
 }
 
 // Run dispatches messages until ctx ends. go-redis reconnects and
 // resubscribes on its own when Redis restarts.
 func (h *Hub) Run(ctx context.Context) {
-	ch := h.ps.Channel(redis.WithChannelSize(1024))
+	ch := h.ps.ChannelWithSubscriptions(redis.WithChannelSize(1024))
 	for {
 		select {
 		case <-ctx.Done():
@@ -86,9 +96,22 @@ func (h *Hub) Run(ctx context.Context) {
 			if !ok {
 				return
 			}
-			h.dispatch(ctx, msg.Channel, []byte(msg.Payload))
+			switch m := msg.(type) {
+			case *redis.Message:
+				h.dispatch(ctx, m.Channel, []byte(m.Payload))
+			case *redis.Subscription:
+				if m.Kind == "subscribe" {
+					h.confirmed(m.Channel)
+				}
+			}
 		}
 	}
+}
+
+func (h *Hub) confirmed(channel string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.releasePendingLocked(channel)
 }
 
 func (h *Hub) dispatch(ctx context.Context, channel string, payload []byte) {
@@ -105,21 +128,45 @@ func (h *Hub) dispatch(ctx context.Context, channel string, payload []byte) {
 }
 
 // Subscribe registers a consumer of channel.
+//
+// It returns once Redis has confirmed the subscription, so a message
+// published right after Subscribe returns is delivered: go-redis only writes
+// SUBSCRIBE, and a PUBLISH on another connection could otherwise reach Redis
+// first and be lost (a sync answer, a tunnel's first request).
 func (h *Hub) Subscribe(ctx context.Context, channel string) (*Subscriber, error) {
 	s := &Subscriber{channel: channel, events: make(chan []byte, subscriberBuffer), done: make(chan struct{})}
 
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if h.closed {
+		h.mu.Unlock()
 		return nil, ErrClosed
 	}
 	if len(h.subs[channel]) == 0 {
+		confirm := make(chan struct{})
+		h.pending[channel] = confirm
 		if err := h.ps.Subscribe(ctx, channel); err != nil {
+			delete(h.pending, channel)
+			h.mu.Unlock()
 			return nil, err
 		}
 		h.subs[channel] = map[*Subscriber]struct{}{}
 	}
 	h.subs[channel][s] = struct{}{}
+	confirm := h.pending[channel] // nil once confirmed
+	h.mu.Unlock()
+
+	if confirm != nil {
+		timer := time.NewTimer(confirmTimeout)
+		defer timer.Stop()
+		select {
+		case <-confirm:
+		case <-timer.C:
+			h.logger.WarnContext(ctx, "redis subscription not confirmed in time", "channel", channel)
+		case <-ctx.Done():
+			h.Unsubscribe(context.WithoutCancel(ctx), s)
+			return nil, ctx.Err()
+		}
+	}
 	return s, nil
 }
 
@@ -141,6 +188,7 @@ func (h *Hub) removeLocked(ctx context.Context, s *Subscriber) {
 	delete(set, s)
 	if len(set) == 0 {
 		delete(h.subs, s.channel)
+		h.releasePendingLocked(s.channel)
 		if !h.closed {
 			// Best effort: a stale subscription only costs ignored messages.
 			if err := h.ps.Unsubscribe(ctx, s.channel); err != nil {
@@ -177,5 +225,16 @@ func (h *Hub) Shutdown() {
 		}
 	}
 	h.subs = map[string]map[*Subscriber]struct{}{}
+	for channel := range h.pending {
+		h.releasePendingLocked(channel)
+	}
 	_ = h.ps.Close()
+}
+
+// releasePendingLocked wakes anyone waiting for channel's confirmation.
+func (h *Hub) releasePendingLocked(channel string) {
+	if c, ok := h.pending[channel]; ok {
+		close(c)
+		delete(h.pending, channel)
+	}
 }
