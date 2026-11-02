@@ -129,6 +129,25 @@ A REST API described by [OpenAPI](api/openapi.yaml), with scoped keys, idempoten
   </tr>
 </table>
 
+<table>
+  <tr>
+    <td width="50%"><img alt="Signature verification: Stripe, GitHub, Shopify, Slack, Standard Webhooks, Discord and generic HMAC requests marked verified, and one Stripe request flagged as a mismatch" src="https://hookline.vante.app/readme/signatures.webp"></td>
+    <td width="50%"><img alt="Edit and replay: a payload with its status field changed, replayed to a destination that succeeded on the third attempt after a 503 and a timeout" src="https://hookline.vante.app/readme/replay.webp"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Seven signature schemes, checked the moment a request lands.</sub></td>
+    <td align="center"><sub>Edit a payload, replay it, and watch the retries.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img alt="The deliveries page: forwarded requests with their status, attempts, destination and last result" src="https://hookline.vante.app/readme/screenshot-deliveries.webp"></td>
+    <td width="50%"><img alt="The documentation: a getting-started guide next to the docs navigation" src="https://hookline.vante.app/readme/screenshot-docs.webp"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Every delivery and every retry, with one-click retry for failures.</sub></td>
+    <td align="center"><sub>Guides for endpoints, the CLI, destinations, signatures and the API.</sub></td>
+  </tr>
+</table>
+
 Plans with usage limits, optional Stripe billing, a status page and an admin area come built in. Self-hosted instances can lift every limit.
 
 ## Quick start
