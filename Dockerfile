@@ -39,6 +39,7 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY --from=web-build --chown=node:node /src/apps/web/.next/standalone ./
 COPY --from=web-build --chown=node:node /src/apps/web/.next/static ./apps/web/.next/static
+COPY --from=web-build --chown=node:node /src/apps/web/public ./apps/web/public
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
