@@ -20,8 +20,6 @@ const PUBLIC = new Set([
   "privacy",
   "terms",
   "status",
-  "robots.txt",
-  "sitemap.xml",
   "opengraph-image",
   "twitter-image",
   "icon",
@@ -54,7 +52,9 @@ export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const first = pathname.split("/")[1] ?? "";
 
-  if (!PUBLIC.has(first) && !getSessionCookie(request, { cookiePrefix: "hookline" })) {
+  // A dot means a file such as icon.svg: organization slugs never contain one.
+  const isFile = first.includes(".");
+  if (!PUBLIC.has(first) && !isFile && !getSessionCookie(request, { cookiePrefix: "hookline" })) {
     // Optimistic check only: pages verify the session on the server.
     const url = new URL("/sign-in", request.url);
     url.searchParams.set("next", pathname + search);
