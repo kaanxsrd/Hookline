@@ -44,28 +44,43 @@
 
 <table>
   <tr>
+    <td width="60%"><img alt="How it works in three steps: get a URL, watch requests arrive verified, then tunnel, forward or replay them" src="https://hookline.vante.app/readme/how-it-works.webp"></td>
+    <td width="40%"><img alt="A captured Stripe webhook in the light theme: replay, copy and download actions above the JSON body" src="https://hookline.vante.app/readme/request-light.webp"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Three steps. From URL to localhost.</sub></td>
+    <td align="center"><sub>Every request, inspected down to the byte.</sub></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
     <td width="50%"><img alt="The live inbox: a list of captured Stripe webhooks next to the selected request's JSON body" src="https://hookline.vante.app/readme/screenshot-inbox.webp"></td>
     <td width="50%"><img alt="The dashboard: a getting-started checklist, request metrics and the endpoint list" src="https://hookline.vante.app/readme/screenshot-dashboard.webp"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Every request, live: body, headers, signature and deliveries.</sub></td>
+    <td align="center"><sub>The live inbox: search, filter and replay as requests arrive.</sub></td>
     <td align="center"><sub>Your endpoints, traffic and plan at a glance.</sub></td>
   </tr>
 </table>
 
-## ✨ Features
+## Features
+
+<img alt="The feature grid: a live inbox, a tunnel to localhost, capture of every method, replay, verified signatures and forwarding with retries" src="https://hookline.vante.app/readme/features.webp" width="100%">
+
+<br>
 
 <table>
   <tr>
     <td width="50%" valign="top">
 
-**📥 Capture everything**<br>
+**Capture everything**<br>
 Every method on any sub-path, with headers, query, body, source and timing. Custom responses and delays, and temporary endpoints that need no account.
 
 </td>
     <td width="50%" valign="top">
 
-**⚡ A live inbox**<br>
+**A live inbox**<br>
 Requests appear in about 100 ms and the stream picks up where it left off after a disconnect. Filters, full-text search, keyboard shortcuts, and JSON, form, XML, raw and hex views.
 
 </td>
@@ -73,13 +88,13 @@ Requests appear in about 100 ms and the stream picks up where it left off after 
   <tr>
     <td valign="top">
 
-**🔁 Replay anything**<br>
+**Replay anything**<br>
 Send any request again to a destination, to the CLI or to any URL, exactly as captured or after editing it.
 
 </td>
     <td valign="top">
 
-**💻 Tunnel to localhost**<br>
+**Tunnel to localhost**<br>
 `hookline listen` forwards webhooks to your machine. Sync mode returns your server's answer to the sender.
 
 </td>
@@ -87,13 +102,13 @@ Send any request again to a destination, to the CLI or to any URL, exactly as ca
   <tr>
     <td valign="top">
 
-**🛡️ Verify signatures**<br>
+**Verify signatures**<br>
 Stripe, GitHub, Shopify, Slack, Discord, Standard Webhooks and generic HMAC-SHA256, checked the moment a request lands. Sensitive headers stay masked until revealed, and every reveal is audited.
 
 </td>
     <td valign="top">
 
-**📤 Forward reliably**<br>
+**Forward reliably**<br>
 Destinations with method, header and JSON-path filters, durable retries with backoff, a full attempt log and optional Standard Webhooks signing. Forwarding never reaches private networks.
 
 </td>
@@ -101,13 +116,13 @@ Destinations with method, header and JSON-path filters, durable retries with bac
   <tr>
     <td valign="top">
 
-**👥 Built for teams**<br>
+**Built for teams**<br>
 Organizations with viewer, member, admin and owner roles, invitations, an audit log, passkeys and TOTP.
 
 </td>
     <td valign="top">
 
-**🧩 Built for developers**<br>
+**Built for developers**<br>
 A REST API described by [OpenAPI](api/openapi.yaml), with scoped keys, idempotency keys and rate limits, plus a native CLI for macOS, Linux and Windows.
 
 </td>
@@ -116,7 +131,7 @@ A REST API described by [OpenAPI](api/openapi.yaml), with scoped keys, idempoten
 
 Plans with usage limits, optional Stripe billing, a status page and an admin area come built in. Self-hosted instances can lift every limit.
 
-## 🚀 Quick start
+## Quick start
 
 Use the hosted service at **[hookline.vante.app](https://hookline.vante.app)**: get a webhook URL in one click, no account needed. Then forward it to your machine:
 
@@ -126,13 +141,9 @@ hookline login
 hookline listen k3Jx9QpL2mWa --forward http://localhost:3000/api/webhooks
 ```
 
-```text
-✓ Forwarding https://hooks.vante.app/h/k3Jx9QpL2mWa → http://localhost:3000/api/webhooks
-12:04:31  POST /h/k3Jx9QpL2mWa/stripe  → 200   38 ms  payment_intent.succeeded
-12:05:02  POST /h/k3Jx9QpL2mWa/github  → 500  112 ms  push
-```
+<img alt="A terminal session: install hookline-cli, log in, forward an endpoint to localhost:3000 and replay a failed request" src="https://hookline.vante.app/readme/terminal.webp" width="100%">
 
-## 💻 Install the CLI
+## Install the CLI
 
 | Platform                         | Command                                                                                            |
 | -------------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -142,7 +153,17 @@ hookline listen k3Jx9QpL2mWa --forward http://localhost:3000/api/webhooks
 
 Release archives for macOS, Linux and Windows (x64 and arm64) come with checksums. The [CLI guide](https://hookline.vante.app/docs/cli) covers `listen`, `tail`, `replay`, `trigger`, `endpoints` and `update`.
 
-## 🧭 How it works
+## How it works
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://hookline.vante.app/readme/flow-dark.webp">
+  <img alt="Senders such as Stripe, GitHub, Shopify and Slack send webhooks to Hookline, which captures, verifies, stores and streams them, then delivers them to localhost through the CLI, to the live inbox and to destinations with retries" src="https://hookline.vante.app/readme/flow-light.webp" width="100%">
+</picture>
+
+<details>
+<summary><b>Services and data stores</b></summary>
+
+<br>
 
 ```mermaid
 flowchart LR
@@ -166,7 +187,9 @@ flowchart LR
 
 More in [architecture](docs/architecture.md) and the [tunnel protocol](docs/tunnel-protocol.md).
 
-## 🏠 Self-host
+</details>
+
+## Self-host
 
 On a host with Docker, ports 80 and 443 open and a DNS record pointing at it:
 
@@ -178,7 +201,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 
 That starts Caddy with automatic TLS, the web app, the edge, the worker, PostgreSQL, Redis, MinIO and daily backups, and runs migrations first. The [deployment guide](docs/deployment.md) covers the first administrator, backups and restores, upgrades, Railway, Fly.io, email and Stripe.
 
-## 🛠️ Develop
+## Develop
 
 Requires [Bun](https://bun.sh) 1.3+, [Go](https://go.dev/dl/) 1.27+ and Docker.
 
@@ -254,7 +277,7 @@ docs               Architecture, tunnel protocol and deployment
 
 </details>
 
-## 📚 Documentation
+## Documentation
 
 | Guide                                                | What's inside                                                       |
 | ---------------------------------------------------- | ------------------------------------------------------------------- |
@@ -268,11 +291,11 @@ docs               Architecture, tunnel protocol and deployment
 | [Contributing](CONTRIBUTING.md)                      | Conventions, database changes, tests and releases                   |
 | [Security policy](SECURITY.md)                       | How to report a vulnerability                                       |
 
-## 📄 License
+## License
 
 [GNU General Public License v3.0](LICENSE) © Vante. Hookline is free software: you can redistribute and modify it under the terms of the GPL, version 3. It comes with no warranty.
 
 <div align="center">
 <br>
-<sub>Built for everyone who has ever waited on a webhook. 🪝</sub>
+<sub>Built for everyone who has ever waited on a webhook.</sub>
 </div>

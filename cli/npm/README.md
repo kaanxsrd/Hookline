@@ -23,17 +23,9 @@
 
 <br>
 
-```sh
-hookline listen k3Jx9QpL2mWa --forward http://localhost:3000/api/webhooks
-```
+<img alt="A terminal session: install hookline-cli, log in, forward an endpoint to localhost:3000 and replay a failed request" src="https://hookline.vante.app/readme/terminal.webp" width="100%">
 
-```text
-✓ Forwarding https://hooks.vante.app/h/k3Jx9QpL2mWa → http://localhost:3000/api/webhooks
-12:04:31  POST /h/k3Jx9QpL2mWa/stripe  → 200   38 ms  payment_intent.succeeded
-12:05:02  POST /h/k3Jx9QpL2mWa/github  → 500  112 ms  push
-```
-
-## 📦 Install
+## Install
 
 ```sh
 npm install -g hookline-cli
@@ -47,7 +39,7 @@ scoop bucket add hookline https://github.com/kaanxsrd/scoop-bucket     # Windows
 scoop install hookline
 ```
 
-## 🚀 Usage
+## Usage
 
 ```sh
 # Sign in through your browser
@@ -72,10 +64,10 @@ hookline update
 
 Run `hookline <command> --help` for every flag, or read the [CLI guide](https://hookline.vante.app/docs/cli).
 
-## 🏠 Self-hosted Hookline
+## Self-hosted Hookline
 
 The CLI talks to [hookline.vante.app](https://hookline.vante.app) by default. Point it at your own instance with `--url` or the `HOOKLINE_URL` environment variable.
 
-## 📄 License
+## License
 
 [GPL-3.0-only](https://www.gnu.org/licenses/gpl-3.0.html) © Vante
