@@ -31,7 +31,9 @@ const common = {
   homepage: "https://hookline.vante.app/docs/cli",
   repository: {
     type: "git",
-    url: "git+https://github.com/kaanxsrd/hookline.git",
+    // The repository the release runs in, so a rename needs no change here.
+    // biome-ignore lint/suspicious/noUndeclaredEnvVars: run by release.yml directly, not through Turborepo
+    url: `git+https://github.com/${process.env.GITHUB_REPOSITORY ?? "kaanxsrd/Hookline"}.git`,
     directory: "cli",
   },
 };

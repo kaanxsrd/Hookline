@@ -49,11 +49,14 @@ jobs:
           check-latest: true
           cache-dependency-path: "**/go.sum"
 
+      - name: Release notes from CHANGELOG.md
+        run: bash scripts/release/notes.sh "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes ${{ runner.temp }}/notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

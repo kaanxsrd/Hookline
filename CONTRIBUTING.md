@@ -53,19 +53,22 @@ This must pass: Biome, tsc, golangci-lint, Go tests and Vitest. CI runs the same
 - **Go:** standard library style, `context` everywhere, `log/slog`, no global state, errors wrapped with `%w`. Tests use `testing` and `testify`.
 - **TypeScript:** strict mode, no `any`. Format and lint with Biome.
 - **Security:** never log request bodies, header values or secrets. Treat every byte from the internet as hostile.
-- **Docs:** update `docs/implementation-status.md` when a feature lands.
+- **Changelog:** add user-facing changes to `CHANGELOG.md` under the next version. Its section becomes the release notes.
 
 ## Releasing
 
 One version covers the CLI and the server images.
 
-1. Move the changelog's "unreleased" entry (`apps/web/app/(marketing)/(prose)/changelog/page.mdx`) to the new version.
-2. Tag the commit and push the tag:
+1. Add a `## [x.y.z] - YYYY-MM-DD` section to `CHANGELOG.md` (it becomes the release notes; the release fails without it) and the same version to the changelog page (`apps/web/app/(marketing)/changelog/page.tsx`).
+2. Bump `version` in every `package.json`, then run `bun install`.
+3. Once CI passes, tag the commit and push the tag:
 
    ```sh
-   git tag v0.1.0 && git push origin v0.1.0
+   git tag -a v1.0.2 -m "Hookline 1.0.2" && git push origin v1.0.2
    ```
 
-`.github/workflows/release.yml` publishes the GitHub release with the CLI archives, the Homebrew cask, the Scoop manifest, the npm packages and the images on GHCR. Tags with a suffix (`v0.2.0-rc.1`) are pre-releases: npm gets them under `next` and the images are not tagged `latest`. See [docs/deployment.md](docs/deployment.md#releases) for the secrets it uses.
+If npm asks for a second factor, the release stages the npm packages instead: approve them with `npm stage list` and `npm stage approve <id>`.
+
+`.github/workflows/release.yml` publishes the GitHub release with the CLI archives, the Homebrew cask, the Scoop manifest, the npm packages and the images on GHCR. Tags with a suffix (`v1.1.0-rc.1`) are pre-releases: npm gets them under `next` and the images are not tagged `latest`. See [docs/deployment.md](docs/deployment.md#releases) for the secrets it uses.
 
 Before a release, `bun run vulncheck` (govulncheck and `bun audit`) and `bun run loadtest` against a local stack are worth a run.

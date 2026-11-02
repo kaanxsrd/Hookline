@@ -16,7 +16,7 @@ Configuration is entirely through environment variables. `.env.example` lists ev
 `docker-compose.prod.yml` runs a complete instance: Caddy (TLS from Let's Encrypt), the web app, the edge, the worker, PostgreSQL 17, Redis 7, MinIO and a daily backup job. You need a host with Docker, ports 80 and 443 open, and a DNS record for your domain pointing at it.
 
 ```sh
-git clone https://github.com/kaanxsrd/hookline && cd hookline
+git clone https://github.com/kaanxsrd/Hookline && cd Hookline
 cp deploy/production.env.example .env.production
 # Fill in the domain, secrets (openssl rand -base64 48) and SMTP settings.
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d
@@ -138,10 +138,10 @@ Everything can run in one Railway project, on Railway's private network: the web
 
 One version covers the whole product. Pushing a tag such as `v1.0.0` runs `.github/workflows/release.yml`:
 
-- **CLI:** goreleaser (`.goreleaser.yaml`) builds macOS, Linux and Windows binaries for x64 and arm64, publishes archives and checksums on the GitHub release, and updates the Homebrew cask in `kaanxsrd/homebrew-tap` and the Scoop manifest in `kaanxsrd/scoop-bucket`. `scripts/release/npm.ts` turns the binaries into `hookline-cli`, a small launcher, plus one optional package per platform (no install script). Release builds talk to `vars.HOOKLINE_DEFAULT_URL` by default.
-- **Images:** `web`, `edge`, `worker` and `migrate` for `linux/amd64` and `linux/arm64` go to GHCR, tagged with the version, `major.minor` and `latest` (not for pre-releases such as `v0.2.0-rc.1`), with provenance and an SBOM.
+- **CLI:** goreleaser (`.goreleaser.yaml`) builds macOS, Linux and Windows binaries for x64 and arm64, publishes archives and checksums on the GitHub release, and updates the Homebrew cask in `kaanxsrd/homebrew-tap` and the Scoop manifest in `kaanxsrd/scoop-bucket`. The release notes are the version's section of `CHANGELOG.md` (`scripts/release/notes.sh`). `scripts/release/npm.ts` turns the binaries into `hookline-cli`, a small launcher, plus one optional `@vantedev/hookline-cli-<os>-<cpu>` package per platform (no install script). Release builds talk to `vars.HOOKLINE_DEFAULT_URL` by default.
+- **Images:** `web`, `edge`, `worker` and `migrate` for `linux/amd64` and `linux/arm64` go to GHCR, tagged with the version, `major.minor` and `latest` (not for pre-releases such as `v1.1.0-rc.1`), with provenance and an SBOM.
 
-The tap, bucket and npm steps are skipped when their secrets (`HOMEBREW_TAP_TOKEN`, `SCOOP_BUCKET_TOKEN`, `NPM_TOKEN`) are not set. CI builds every image and a goreleaser snapshot on each push, so a release cannot break on packaging alone. Try it locally with `goreleaser release --snapshot --clean`.
+The tap, bucket and npm steps are skipped when their secrets (`HOMEBREW_TAP_TOKEN`, `SCOOP_BUCKET_TOKEN`, `NPM_TOKEN`) are not set. When the npm token cannot publish without a second factor, the packages are staged instead; approve them with `npm stage approve`. CI builds every image and a goreleaser snapshot on each push, so a release cannot break on packaging alone. Try it locally with `goreleaser release --snapshot --clean`.
 
 ## Load testing
 
