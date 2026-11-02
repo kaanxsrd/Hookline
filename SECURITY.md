@@ -4,7 +4,7 @@ Hookline stores webhook payloads, which often carry tokens, email addresses and 
 
 ## Reporting a vulnerability
 
-Please **do not open a public issue**. Report privately through GitHub's [private vulnerability reporting](https://github.com/kaanxsrd/hookline/security/advisories/new) for this repository.
+Please **do not open a public issue**. Report privately through GitHub's [private vulnerability reporting](https://github.com/kaanxsrd/Hookline/security/advisories/new) for this repository.
 
 Include:
 

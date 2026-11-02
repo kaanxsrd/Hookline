@@ -87,6 +87,7 @@ export const RESERVED_ORG_SLUGS = new Set([
   "opengraph-image",
   "pricing",
   "privacy",
+  "readme",
   "reset-password",
   "security",
   "settings",

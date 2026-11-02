@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import createMDX from "@next/mdx";
 import type { NextConfig } from "next";
@@ -14,8 +15,14 @@ const securityHeaders = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
 ];
 
+const { version } = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8")) as {
+  version: string;
+};
+
 const config: NextConfig = {
   output: "standalone",
+  // Shown on the marketing site, so it always matches the release.
+  env: { NEXT_PUBLIC_APP_VERSION: version },
   outputFileTracingRoot: path.resolve(process.cwd(), "../.."),
   poweredByHeader: false,
   // Workspace packages ship TypeScript sources.

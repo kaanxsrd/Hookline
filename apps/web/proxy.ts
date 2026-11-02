@@ -25,6 +25,8 @@ const PUBLIC = new Set([
   "opengraph-image",
   "twitter-image",
   "icon",
+  // Images for the README files on GitHub and npm (public/readme).
+  "readme",
 ]);
 
 function contentSecurityPolicy(nonce: string): string {

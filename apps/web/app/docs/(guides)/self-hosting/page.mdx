@@ -22,14 +22,14 @@ They need PostgreSQL 17, Redis 7 and S3-compatible object storage for bodies ove
 On a host with Docker, ports 80 and 443 open and a DNS record pointing at it:
 
 ```sh
-git clone https://github.com/kaanxsrd/hookline && cd hookline
+git clone https://github.com/kaanxsrd/Hookline && cd Hookline
 cp deploy/production.env.example .env.production   # domain, secrets, SMTP
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 ```
 
 This starts Caddy (with a Let's Encrypt certificate), the web app, the edge, the worker, PostgreSQL, Redis, MinIO and a daily database backup. Migrations run on every start. Images are published to GitHub's container registry for each release (`ghcr.io/kaanxsrd/hookline-web`, `-edge`, `-worker` and `-migrate`).
 
-The [deployment guide](https://github.com/kaanxsrd/hookline/blob/main/docs/deployment.md) covers backups and restores, upgrades, Fly.io, email, Stripe billing and load testing.
+The [deployment guide](https://github.com/kaanxsrd/Hookline/blob/main/docs/deployment.md) covers backups and restores, upgrades, Fly.io, email, Stripe billing and load testing.
 
 ## Lifting plan limits
 

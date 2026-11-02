@@ -1,7 +1,7 @@
 import type { Route } from "next";
 
 /** Where the source lives (the CLI's buildinfo names the same repository). */
-export const REPOSITORY_URL = "https://github.com/kaanxsrd/hookline";
+export const REPOSITORY_URL = "https://github.com/kaanxsrd/Hookline";
 
 /**
  * An absolute URL on this instance. Reads APP_URL directly, like the root

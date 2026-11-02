@@ -35,7 +35,7 @@ export function Hero() {
           >
             <Sparkles className="text-primary size-3.5" aria-hidden />
             <span className="text-muted-foreground">
-              Hookline 0.1 · free software under GPL-3.0
+              Hookline {process.env.NEXT_PUBLIC_APP_VERSION} · free software under GPL-3.0
             </span>
             <ArrowRight className="size-3" aria-hidden />
           </Link>
