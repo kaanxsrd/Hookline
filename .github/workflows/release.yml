@@ -9,10 +9,18 @@ name: Release
 #   secrets.SCOOP_BUCKET_TOKEN  push access to kaanxsrd/scoop-bucket (optional)
 #   secrets.NPM_TOKEN           publish rights for hookline-cli and hookline-cli-* on npm (optional)
 #   vars.HOOKLINE_DEFAULT_URL   the instance release CLIs talk to by default
+#
+# Running the workflow by hand publishes only the npm packages, from the CLI
+# build of an earlier release run: for when npm failed and the rest went out.
 
 on:
   push:
     tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Release run whose CLI build to publish to npm
+        required: true
 
 permissions:
   contents: read
@@ -24,6 +32,7 @@ concurrency:
 jobs:
   cli:
     name: CLI (goreleaser)
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -63,10 +72,12 @@ jobs:
   npm:
     name: npm packages
     needs: cli
+    if: ${{ !cancelled() && (needs.cli.result == 'success' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
+      actions: read # the CLI build of another run
       id-token: write # npm provenance
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -77,6 +88,8 @@ jobs:
         with:
           name: dist
           path: dist
+          run-id: ${{ inputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -93,7 +106,7 @@ jobs:
         if: env.NODE_AUTH_TOKEN != ''
         env:
           # npm signs provenance only for public source repositories.
-          PROVENANCE: ${{ github.event.repository.private && '' || '--provenance' }}
+          PROVENANCE: ${{ !github.event.repository.private && '--provenance' || '' }}
         run: |
           tag=latest
           case "$GITHUB_REF_NAME" in *-*) tag=next ;; esac
@@ -110,6 +123,7 @@ jobs:
 
   images:
     name: Image (${{ matrix.target }})
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
