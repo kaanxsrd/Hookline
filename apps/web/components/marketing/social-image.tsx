@@ -23,9 +23,15 @@ export function socialImage(): ImageResponse {
         style={{ display: "flex", alignItems: "center", gap: 20, fontSize: 40, fontWeight: 600 }}
       >
         <svg width="64" height="64" viewBox="0 0 32 32" fill="none" aria-hidden>
-          <rect width="32" height="32" rx="8" fill="#6366f1" />
+          <defs>
+            <linearGradient id="tile" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stopColor="#6d5ef5" />
+              <stop offset="1" stopColor="#22c1e3" />
+            </linearGradient>
+          </defs>
+          <rect width="32" height="32" rx="8" fill="url(#tile)" />
           <path
-            d="M11 6v12a5 5 0 0 0 10 0v-3"
+            d="M11 6v12a5 5 0 0 0 10 0v-7"
             stroke="#fff"
             strokeWidth="3"
             strokeLinecap="round"

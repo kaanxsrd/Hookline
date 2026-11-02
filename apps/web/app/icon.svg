@@ -1,6 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
   <title>Hookline</title>
-  <rect width="32" height="32" rx="8" fill="#4f46e5"/>
-  <path d="M11 6v12a5 5 0 0 0 10 0v-3" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6d5ef5"/>
+      <stop offset="1" stop-color="#22c1e3"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity=".3"/>
+      <stop offset=".55" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#tile)"/>
+  <rect width="32" height="32" rx="8" fill="url(#shine)"/>
+  <path d="M11 6v12a5 5 0 0 0 10 0v-7" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M17.5 14.5 21 11l3.5 3.5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

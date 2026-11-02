@@ -109,6 +109,8 @@
   --animate-meteor-effect: meteor 5s linear infinite;
   --animate-pulse-ring: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-caret: caret 1s step-end infinite;
+  --animate-logo-draw: logo-draw 0.9s cubic-bezier(0.65, 0, 0.35, 1) 0.1s both;
+  --animate-logo-barb: logo-barb 0.4s ease-out 0.85s both;
   --color-brand-cyan: oklch(0.789 0.154 211.53);
 }
 
@@ -146,6 +148,25 @@
 @keyframes caret {
   50% {
     opacity: 0;
+  }
+}
+
+/* The logo's hook draws itself in (its path has pathLength="1"). */
+@keyframes logo-draw {
+  from {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes logo-barb {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
   }
 }
 
@@ -197,7 +218,9 @@
   .animate-scroll,
   .animate-meteor-effect,
   .animate-pulse-ring,
-  .animate-caret {
+  .animate-caret,
+  .animate-logo-draw,
+  .animate-logo-barb {
     /* Unlayered, so it beats the layered animation utilities without !important. */
     animation: none;
   }
