@@ -1,6 +1,6 @@
 {
   "name": "@hookline/db",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Hookline database schema (Drizzle), migrations and seed data.",
   "license": "GPL-3.0-only",

@@ -1,6 +1,6 @@
 {
   "name": "@hookline/cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "The hookline command-line tool.",
   "license": "GPL-3.0-only",

@@ -1,6 +1,6 @@
 {
   "name": "@hookline/worker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Go worker: forwarding, retries, retention, rollups.",
   "license": "GPL-3.0-only",

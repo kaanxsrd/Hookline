@@ -103,14 +103,31 @@ export default function ChangelogPage() {
         with the CLI and the server images.
       </PageHero>
       <div className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
+        <section className="mb-16 grid gap-4">
+          <div className="flex flex-wrap items-baseline gap-3">
+            <h2 className="font-mono text-2xl font-semibold">1.0.1</h2>
+            <a
+              href={`${REPOSITORY_URL}/releases/tag/v1.0.1`}
+              className="border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 rounded-full border px-2.5 py-0.5 font-mono text-xs transition-colors"
+            >
+              latest
+            </a>
+            <time dateTime="2026-11-02" className="text-muted-foreground font-mono text-xs">
+              2026-11-02
+            </time>
+          </div>
+          <ul className="bg-card/60 max-w-3xl space-y-3 rounded-xl border p-6 text-sm leading-relaxed backdrop-blur">
+            <li className="flex gap-3">
+              <span className="bg-primary mt-2 size-1.5 shrink-0 rounded-full" aria-hidden />
+              <span>
+                {code("npm install -g hookline-cli")} now works on Windows x64: the platform
+                binaries moved to {code("@vantedev/hookline-cli-<os>-<cpu>")}.
+              </span>
+            </li>
+          </ul>
+        </section>
         <div className="flex flex-wrap items-baseline gap-3">
           <h2 className="font-mono text-2xl font-semibold">1.0.0</h2>
-          <a
-            href={`${REPOSITORY_URL}/releases/tag/v1.0.0`}
-            className="border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 rounded-full border px-2.5 py-0.5 font-mono text-xs transition-colors"
-          >
-            latest
-          </a>
           <time dateTime="2026-10-30" className="text-muted-foreground font-mono text-xs">
             2026-10-30
           </time>

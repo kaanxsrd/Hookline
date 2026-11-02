@@ -7,7 +7,7 @@ name: Release
 # Repository settings used here:
 #   secrets.HOMEBREW_TAP_TOKEN  push access to kaanxsrd/homebrew-tap (optional)
 #   secrets.SCOOP_BUCKET_TOKEN  push access to kaanxsrd/scoop-bucket (optional)
-#   secrets.NPM_TOKEN           publish rights for hookline-cli and hookline-cli-* on npm (optional)
+#   secrets.NPM_TOKEN           publish rights for hookline-cli and @vantedev/hookline-cli-* on npm (optional)
 #   vars.HOOKLINE_DEFAULT_URL   the instance release CLIs talk to by default
 #
 # Running the workflow by hand publishes only the npm packages, from the CLI
@@ -100,6 +100,9 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
+      # npm stage (publish now, approve with 2FA later) needs npm 11.19 or newer.
+      - run: npm install -g npm@11.19.1
+
       - run: bun scripts/release/npm.ts dist
 
       - name: Publish (platform packages first, then the launcher)
@@ -108,8 +111,10 @@ jobs:
           # npm signs provenance only for public source repositories.
           PROVENANCE: ${{ !github.event.repository.private && '--provenance' || '' }}
         run: |
+          set -o pipefail
           tag=latest
           case "$GITHUB_REF_NAME" in *-*) tag=next ;; esac
+          staged=""
           for dir in dist/npm/cli-*/ dist/npm/cli/; do
             # A re-run skips versions that are already on npm.
             name=$(node -p "require('./$dir/package.json').name")
@@ -118,8 +123,30 @@ jobs:
               echo "$name@$version is already published"
               continue
             fi
-            (cd "$dir" && npm publish --access public $PROVENANCE --tag "$tag")
+            if (cd "$dir" && npm publish --access public $PROVENANCE --tag "$tag" 2>&1 | tee ../publish.log); then
+              continue
+            fi
+            # A token without 2FA bypass cannot publish: stage the version for
+            # the maintainer to approve with their second factor instead.
+            grep -q EOTP "dist/npm/publish.log" || exit 1
+            (cd "$dir" && npm stage publish . --access public $PROVENANCE --tag "$tag")
+            staged="$staged $name@$version"
           done
+          if [ -n "$staged" ]; then
+            {
+              echo "### npm packages staged for approval"
+              echo
+              echo "Approve them with your second factor (npm 11.19 or newer):"
+              echo
+              echo '```sh'
+              echo 'npm stage list'
+              echo 'npm stage approve <stage-id>   # for each package, platform packages first'
+              echo '```'
+              echo
+              for p in $staged; do echo "- \`$p\`"; done
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::npm packages staged, approve them with 'npm stage approve':$staged"
+          fi
 
   images:
     name: Image (${{ matrix.target }})

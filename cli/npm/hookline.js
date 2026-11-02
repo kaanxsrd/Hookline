@@ -6,19 +6,19 @@ import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 
 const platforms = {
-  "darwin-arm64": "hookline-cli-darwin-arm64",
-  "darwin-x64": "hookline-cli-darwin-x64",
-  "linux-arm64": "hookline-cli-linux-arm64",
-  "linux-x64": "hookline-cli-linux-x64",
-  "win32-arm64": "hookline-cli-win32-arm64",
-  "win32-x64": "hookline-cli-win32-x64",
+  "darwin-arm64": "@vantedev/hookline-cli-darwin-arm64",
+  "darwin-x64": "@vantedev/hookline-cli-darwin-x64",
+  "linux-arm64": "@vantedev/hookline-cli-linux-arm64",
+  "linux-x64": "@vantedev/hookline-cli-linux-x64",
+  "win32-arm64": "@vantedev/hookline-cli-win32-arm64",
+  "win32-x64": "@vantedev/hookline-cli-win32-x64",
 };
 
 const key = `${process.platform}-${process.arch}`;
 const pkg = platforms[key];
 if (!pkg) {
   console.error(
-    `hookline: no build for ${key}. Download one from https://github.com/kaanxsrd/hookline/releases`,
+    `hookline: no build for ${key}. See https://hookline.vante.app/docs/cli for other ways to install`,
   );
   process.exit(1);
 }

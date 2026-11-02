@@ -1,6 +1,6 @@
 {
   "name": "@hookline/protocol",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Tunnel protocol hookline.v1: message types and constants (Go).",
   "license": "GPL-3.0-only",

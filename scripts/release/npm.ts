@@ -2,7 +2,7 @@
  * bun scripts/release/npm.ts [dist] — builds the npm packages of the CLI from
  * a goreleaser dist directory (after `goreleaser release`):
  *
- *   dist/npm/cli-<os>-<cpu>/   hookline-cli-<os>-<cpu>, one native binary each
+ *   dist/npm/cli-<os>-<cpu>/   @vantedev/hookline-cli-<os>-<cpu>, one native binary each
  *   dist/npm/cli/              hookline-cli, the launcher (cli/npm/hookline.js)
  *                              with the platform packages as optional dependencies
  *
@@ -43,7 +43,7 @@ for (const a of artifacts.filter((x) => x.type === "Binary")) {
   const os = OS[a.goos ?? ""];
   const cpu = CPU[a.goarch ?? ""];
   if (!os || !cpu) continue;
-  const name = `hookline-cli-${os}-${cpu}`;
+  const name = `@vantedev/hookline-cli-${os}-${cpu}`;
   const dir = path.join(out, `cli-${os}-${cpu}`);
   const exe = os === "win32" ? "hookline.exe" : "hookline";
   mkdirSync(path.join(dir, "bin"), { recursive: true });

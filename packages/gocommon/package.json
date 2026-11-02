@@ -1,6 +1,6 @@
 {
   "name": "@hookline/gocommon",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Shared Go code: config, logging, HTTP plumbing.",
   "license": "GPL-3.0-only",

@@ -4,6 +4,14 @@ All notable changes to Hookline. One version covers the web app, the edge,
 the worker and the CLI. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-11-02
+
+### Fixed
+
+- `npm install -g hookline-cli` now works on Windows x64. The platform binaries
+  moved to `@vantedev/hookline-cli-<os>-<cpu>`, because npm blocked the
+  unscoped Windows x64 package name.
+
 ## [1.0.0] - 2026-10-30
 
 The first stable release of Hookline.
@@ -54,4 +62,5 @@ The first stable release of Hookline.
 - A load-testing script and vulnerability scanning in CI.
 - Licensed under the GNU General Public License v3.0.
 
+[1.0.1]: https://github.com/kaanxsrd/hookline/releases/tag/v1.0.1
 [1.0.0]: https://github.com/kaanxsrd/hookline/releases/tag/v1.0.0
