@@ -1,50 +1,55 @@
 import "server-only";
+import { createRateLimiter, type RateLimitRule, redisStore } from "@vantedev/groundwork/rate-limit";
+import { env } from "../env";
 import { getRedis } from "../redis";
 
 /** Requests per key: a bucket of BURST refilled at RATE per second. */
 export const API_RATE_PER_SECOND = 10;
 export const API_BURST = 120;
 
-// Token bucket in Redis (the same scheme as the edge's intake limits).
-const SCRIPT = `
-local t = redis.call('TIME')
-local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
-local rate, burst = tonumber(ARGV[1]), tonumber(ARGV[2])
-local v = redis.call('HMGET', KEYS[1], 'tokens', 'ts')
-local tokens = tonumber(v[1]) or burst
-local ts = tonumber(v[2]) or now
-tokens = math.min(burst, tokens + math.max(0, now - ts) * rate / 1000)
-local allowed = 0
-if tokens >= 1 then
-  tokens = tokens - 1
-  allowed = 1
-end
-redis.call('HSET', KEYS[1], 'tokens', tostring(tokens), 'ts', tostring(now))
-redis.call('PEXPIRE', KEYS[1], math.ceil(burst / rate * 1000) + 1000)
-return {allowed, tostring(tokens)}
-`;
+let rule: RateLimitRule | undefined;
 
-export type RateDecision = { allowed: boolean; remaining: number; resetSeconds: number };
+/**
+ * The per-key token bucket, counted in Redis by groundwork with one script per request. Key ids
+ * are stored as HMACs keyed from BETTER_AUTH_SECRET. If Redis is unavailable, each instance
+ * keeps counting in memory until it's back.
+ */
+function apiRule(): RateLimitRule {
+  rule ??= createRateLimiter({
+    store: redisStore({
+      client: {
+        eval: (script, keys, args) => getRedis().eval(script, keys.length, ...keys, ...args),
+      },
+    }),
+    secret: env().BETTER_AUTH_SECRET,
+  }).rule({
+    name: "api:key",
+    algorithm: "token-bucket",
+    rate: API_RATE_PER_SECOND,
+    per: "1s",
+    burst: API_BURST,
+  });
+  return rule;
+}
 
-/** Takes one token for the key. Fails open when Redis is unavailable. */
+export type RateDecision = {
+  allowed: boolean;
+  remaining: number;
+  /** Seconds until the bucket is full again. */
+  resetSeconds: number;
+  /** Seconds until the next token, when denied. */
+  retryAfterSeconds: number;
+};
+
+/** Takes one token for the key. */
 export async function takeToken(keyId: string): Promise<RateDecision> {
-  try {
-    const [allowed, tokens] = (await getRedis().eval(
-      SCRIPT,
-      1,
-      `rl:api:${keyId}`,
-      API_RATE_PER_SECOND,
-      API_BURST,
-    )) as [number, string];
-    const left = Number(tokens);
-    return {
-      allowed: allowed === 1,
-      remaining: Math.floor(left),
-      resetSeconds: Math.ceil((API_BURST - left) / API_RATE_PER_SECOND),
-    };
-  } catch {
-    return { allowed: true, remaining: API_BURST, resetSeconds: 0 };
-  }
+  const result = await apiRule().check(keyId);
+  return {
+    allowed: result.allowed,
+    remaining: result.remaining,
+    resetSeconds: Math.ceil((API_BURST - result.remaining) / API_RATE_PER_SECOND),
+    retryAfterSeconds: Math.max(1, Math.ceil(result.retryAfterMs / 1000)),
+  };
 }
 
 export function rateLimitHeaders(d: RateDecision): Record<string, string> {

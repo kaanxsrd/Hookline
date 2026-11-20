@@ -36,7 +36,7 @@ export function apiRoute<P = Record<string, never>>(scope: ApiScope | null, hand
           "rate_limited",
           "Too many requests for this API key. Slow down and retry.",
           undefined,
-          { ...limitHeaders, "Retry-After": String(Math.max(1, Math.ceil(1 / 10))) },
+          { ...limitHeaders, "Retry-After": String(decision.retryAfterSeconds) },
         );
       }
       const params = await context.params;
