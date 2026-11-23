@@ -15,7 +15,7 @@
 # environment (see deploy/production.env.example).
 
 ARG BUN_VERSION=1.4.2
-ARG GO_VERSION=1.27.3
+ARG GO_VERSION=1.27.4
 ARG NODE_VERSION=24.22.2
 ARG HOOKLINE_TARGET=web
 

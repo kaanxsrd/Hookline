@@ -1,7 +1,7 @@
 go 1.27.0
 
 // Builds use at least this patch release (security fixes in the standard library).
-toolchain go1.27.3
+toolchain go1.27.4
 
 use (
 	./cli
