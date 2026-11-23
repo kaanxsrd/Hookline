@@ -93,18 +93,28 @@ jobs:
       - name: Migrate
         if: steps.changes.outputs.migrate == 'true'
         run: |
-          railway up --service migrate --ci --message "migrate ${SHA::7}"
-          # The container exits once migrations are applied; wait for it and check it worked.
+          set -o pipefail
+          railway up --service migrate --ci --message "migrate ${SHA::7}" | tee up.log
+          # The container applies the migrations and exits. Its status reads SUCCESS as soon as it
+          # starts, so wait for its own log line instead. Read this deployment's logs by id: without
+          # one, railway logs shows the last successful deployment, which could be an older run.
+          deployment=$(grep -oE '[?]id=[0-9a-f-]{36}' up.log | head -1 | cut -d= -f2 || true)
+          [ -n "$deployment" ] || { echo "::error::railway up printed no deployment id"; exit 1; }
           for i in $(seq 1 60); do
+            railway logs "$deployment" --service migrate --lines 50 > migrate.log 2>&1 || true
+            if grep -q "Migrations applied." migrate.log; then
+              cat migrate.log
+              exit 0
+            fi
             status=$(railway service status --service migrate 2>/dev/null | awk '/Status:/ {print $2}')
             case "$status" in
-              STOPPED|SUCCESS|REMOVED) break ;;
-              FAILED|CRASHED) echo "::error::migrate ended with $status"; railway logs --service migrate --lines 50 || true; exit 1 ;;
+              FAILED|CRASHED) echo "::error::migrate ended with $status"; cat migrate.log; exit 1 ;;
             esac
             sleep 5
           done
-          railway logs --service migrate --lines 30 | tee migrate.log
-          grep -q "Migrations applied." migrate.log || { echo "::error::migrations did not report success"; exit 1; }
+          cat migrate.log
+          echo "::error::migrations did not report success within 5 minutes"
+          exit 1
 
       - name: Deploy services
         if: steps.latest.outputs.skip != 'true'
