@@ -9,6 +9,12 @@
 version: 2
 project_name: hookline
 
+git:
+  # The deploy workflow moves this tag to the commit in production. It isn't a
+  # version, and its "/" isn't allowed in one.
+  ignore_tags:
+    - deployed/production
+
 builds:
   - id: hookline
     dir: cli
