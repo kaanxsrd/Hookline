@@ -1,5 +1,5 @@
 import "server-only";
-import { createRateLimiter, type RateLimitRule, redisStore } from "@vantedev/groundwork/rate-limit";
+import { createRateLimiter, redisStore } from "@vantedev/groundwork/rate-limit";
 import { env } from "../env";
 import { getRedis } from "../redis";
 
@@ -7,30 +7,25 @@ import { getRedis } from "../redis";
 export const API_RATE_PER_SECOND = 10;
 export const API_BURST = 120;
 
-let rule: RateLimitRule | undefined;
-
 /**
  * The per-key token bucket, counted in Redis by groundwork with one script per request. Key ids
- * are stored as HMACs keyed from BETTER_AUTH_SECRET. If Redis is unavailable, each instance
- * keeps counting in memory until it's back.
+ * are stored as HMACs keyed from BETTER_AUTH_SECRET, read on the first check, so `next build`
+ * needs no secret. If Redis is unavailable, each instance keeps counting in memory until it's back.
  */
-function apiRule(): RateLimitRule {
-  rule ??= createRateLimiter({
-    store: redisStore({
-      client: {
-        eval: (script, keys, args) => getRedis().eval(script, keys.length, ...keys, ...args),
-      },
-    }),
-    secret: env().BETTER_AUTH_SECRET,
-  }).rule({
-    name: "api:key",
-    algorithm: "token-bucket",
-    rate: API_RATE_PER_SECOND,
-    per: "1s",
-    burst: API_BURST,
-  });
-  return rule;
-}
+const apiRule = createRateLimiter({
+  store: redisStore({
+    client: {
+      eval: (script, keys, args) => getRedis().eval(script, keys.length, ...keys, ...args),
+    },
+  }),
+  secret: () => env().BETTER_AUTH_SECRET,
+}).rule({
+  name: "api:key",
+  algorithm: "token-bucket",
+  rate: API_RATE_PER_SECOND,
+  per: "1s",
+  burst: API_BURST,
+});
 
 export type RateDecision = {
   allowed: boolean;
@@ -43,7 +38,7 @@ export type RateDecision = {
 
 /** Takes one token for the key. */
 export async function takeToken(keyId: string): Promise<RateDecision> {
-  const result = await apiRule().check(keyId);
+  const result = await apiRule.check(keyId);
   return {
     allowed: result.allowed,
     remaining: result.remaining,

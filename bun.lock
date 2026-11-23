@@ -32,7 +32,7 @@
         "@trpc/client": "11.22.1",
         "@trpc/server": "11.22.1",
         "@trpc/tanstack-react-query": "11.22.1",
-        "@vantedev/groundwork": "0.1.0",
+        "@vantedev/groundwork": "0.2.0",
         "better-auth": "1.7.14",
         "class-variance-authority": "0.7.1",
         "clsx": "2.1.1",
@@ -881,7 +881,7 @@
 
     "@unhead/vue": ["@unhead/vue@3.4.3", "", { "dependencies": { "@unhead/bundler": "3.4.3", "hookable": "^6.1.1", "unhead": "3.4.3", "unplugin": "^3.3.0" }, "peerDependencies": { "vite": ">=6.4.2", "vue": ">=3.5.18", "webpack": ">=5.0.0" }, "optionalPeers": ["vite", "webpack"] }, "sha512-Wrmk62oC/V1EcBSKRDuy77kVaBtBXXsj6b+vEEWvmfo9AQfpLlc2b6vvvSj9WnXr8VY1ksKHj49Ejo8J/wLSOA=="],
 
-    "@vantedev/groundwork": ["@vantedev/groundwork@0.1.0", "", { "peerDependencies": { "drizzle-orm": "^0.45.0" } }, "sha512-eRkX7ODV8PzcVkwENFuXhBuUBQz2FVfu4crJSksGsCdKYody/LdLAdYYDJIPyEtQBGAYqtJrj6hY/Lj8ifIq8Q=="],
+    "@vantedev/groundwork": ["@vantedev/groundwork@0.2.0", "", { "peerDependencies": { "drizzle-orm": "^0.45.0" } }, "sha512-zXRgJqkBCmpt7DFOZs53lFdnd7QYQnWDg0KlHsWGG+91KXbWmWu4fYDdFJyF7LhZKtJCIxzxI0iGNjYzwVXUKg=="],
 
     "@vercel/oidc": ["@vercel/oidc@3.2.0", "", {}, "sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug=="],
 
